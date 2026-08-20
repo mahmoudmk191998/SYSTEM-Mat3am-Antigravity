@@ -55,6 +55,7 @@ export interface CreateWebhookEndpointInput {
 export interface CreateWebhookEndpointResult {
   endpoint: PublicWebhookEndpoint;
   secret: string; // Plaintext secret returned ONCE on creation
+  warning?: string;
 }
 
 export interface WebhookEventPayload {
@@ -73,7 +74,7 @@ export interface WebhookEvent {
   event_id: string;
   order_id?: string;
   payload: WebhookEventPayload;
-  status: 'pending' | 'delivered' | 'failed';
+  status: 'pending' | 'delivered' | 'failed' | 'retrying' | 'permanently_failed';
   attempts: number;
   next_attempt_at: string | null;
   delivered_at: string | null;
@@ -89,6 +90,7 @@ export interface WebhookDeliveryAttempt {
   status_code: number | null;
   response_time_ms: number;
   success: boolean;
+  response_body?: string;
   error: string | null;
   created_at: string;
 }

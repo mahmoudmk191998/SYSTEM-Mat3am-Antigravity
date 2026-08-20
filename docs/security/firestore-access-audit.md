@@ -12,8 +12,10 @@ This document audits every collection and direct Firestore SDK access across the
 | `api_client_audit_logs` | Backend Only | `get`, `set` | **A. Server-Only** | Direct client access forbidden (`if false;`). Exposed via `/api/v1/admin/api-clients/:id/audit-logs`. |
 | `api_usage_events` | Backend Only | `set`, `query` | **A. Server-Only** | Direct client access forbidden (`if false;`). Exposed via `/api/v1/admin/api-clients/:id/usage`. |
 | `webhook_endpoints` | Backend Only | `get`, `set`, `delete` | **A. Server-Only** | Direct client access forbidden (`if false;`). Exposed via `/api/v1/webhooks`. |
+| `integrations` | Backend Only | `get`, `set`, `update` | **A. Server-Only** | Direct client access forbidden (`if false;`). Exposed via `/api/v1/admin/integrations`. |
 | `webhook_events` | Backend Only | `set` | **A. Server-Only** | Direct client access forbidden (`if false;`). Processed asynchronously by RMS dispatcher. |
 | `webhook_delivery_attempts`| Backend Only | `set` | **A. Server-Only** | Direct client access forbidden (`if false;`). Internal retry tracking only. |
+| `webhook_dead_letters` | Backend Only | `set`, `query` | **A. Server-Only** | Direct client access forbidden (`if false;`). Exposed via `/api/v1/admin/integrations/:id/dead-letters`. |
 | `branch_counters` / `orderCounters` | Backend Only | `transaction get/set` | **A. Server-Only** | Direct client access forbidden (`if false;`). Atomic counter managed exclusively in `order.service.ts`. |
 | `idempotency_records` | Backend Only | `transaction get/set` | **A. Server-Only** | Direct client access forbidden (`if false;`). Handled transparently by RMS Orders API. |
 | `tenants` | POS / Staff | `getDoc`, `updateDoc` | **B. Client-Accessible (Auth)** | Requires `request.auth != null`. Stores company name, tax rates, and settings. |

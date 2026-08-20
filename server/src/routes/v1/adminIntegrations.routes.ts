@@ -6,6 +6,8 @@ import {
   updateIntegration,
   revokeIntegration,
   rotateSecret,
+  getWebhookHealth,
+  getDeadLetters,
 } from '../../controllers/adminIntegrations.controller.js';
 import { authenticateApiKey } from '../../middleware/auth.middleware.js';
 import { requirePermission } from '../../middleware/permission.middleware.js';
@@ -65,4 +67,20 @@ adminIntegrationsRouter.post(
   authenticateApiKey,
   requirePermission('api_clients:manage'),
   rotateSecret
+);
+
+// GET /admin/integrations/:id/webhook-health (Webhook delivery observability & metrics)
+adminIntegrationsRouter.get(
+  '/admin/integrations/:id/webhook-health',
+  authenticateApiKey,
+  requirePermission('api_clients:manage'),
+  getWebhookHealth
+);
+
+// GET /admin/integrations/:id/dead-letters (Inspect failed webhook events)
+adminIntegrationsRouter.get(
+  '/admin/integrations/:id/dead-letters',
+  authenticateApiKey,
+  requirePermission('api_clients:manage'),
+  getDeadLetters
 );

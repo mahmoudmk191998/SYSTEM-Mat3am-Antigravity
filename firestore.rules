@@ -46,6 +46,9 @@ service cloud.firestore {
     match /webhook_delivery_attempts/{attemptId} {
       allow read, write: if false;
     }
+    match /webhook_dead_letters/{letterId} {
+      allow read, write: if false;
+    }
 
     // Atomic sequential order numbering counters
     match /branch_counters/{counterId} {

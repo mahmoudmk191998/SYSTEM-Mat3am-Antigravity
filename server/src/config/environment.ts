@@ -8,12 +8,24 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
   
   // Rate limiting config (configurable, not hardcoded)
+  RATE_LIMIT_STORE: z.enum(['in-memory', 'redis']).default('in-memory'),
   API_RATE_LIMIT: z.coerce.number().default(100),
   API_RATE_LIMIT_DEFAULT: z.coerce.number().default(100),
   API_RATE_LIMIT_STANDARD: z.coerce.number().default(500),
   API_RATE_LIMIT_PREMIUM: z.coerce.number().default(2000),
   API_RATE_WINDOW_MS: z.coerce.number().default(60000), // 1 minute
   
+  // Redis Configuration (Optional for distributed deployments)
+  REDIS_URL: z.string().optional(),
+  REDIS_RATE_LIMIT_PREFIX: z.string().default('rms:ratelimit:'),
+  
+  // Webhook Queue & Worker Configuration
+  WEBHOOK_QUEUE_PROVIDER: z.enum(['in-memory', 'redis']).default('in-memory'),
+  WEBHOOK_MAX_ATTEMPTS: z.coerce.number().default(5),
+  WEBHOOK_BASE_DELAY_SECONDS: z.coerce.number().default(10),
+  WEBHOOK_MAX_DELAY_SECONDS: z.coerce.number().default(300),
+  WEBHOOK_REQUEST_TIMEOUT_MS: z.coerce.number().default(10000),
+
   // CORS configuration
   ALLOWED_ORIGINS: z.string().default('http://localhost:3000,http://localhost:5173,http://localhost:4000'),
   

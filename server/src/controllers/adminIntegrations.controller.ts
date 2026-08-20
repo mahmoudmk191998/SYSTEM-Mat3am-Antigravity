@@ -3,11 +3,16 @@ import {
   defaultIntegrationService,
   IntegrationService,
 } from '../services/integration.service.js';
+import {
+  defaultWebhookService,
+  WebhookService,
+} from '../services/webhook.service.js';
 import { AuthenticatedRequest } from '../types/api.types.js';
 import { sendSuccess } from '../utils/response.js';
 
 export function createAdminIntegrationsController(
-  integrationService: IntegrationService = defaultIntegrationService
+  integrationService: IntegrationService = defaultIntegrationService,
+  webhookService: WebhookService = defaultWebhookService
 ) {
   return {
     onboardIntegration: async (
@@ -102,6 +107,41 @@ export function createAdminIntegrationsController(
         next(error);
       }
     },
+
+    getWebhookHealth: async (
+      req: AuthenticatedRequest,
+      res: Response,
+      next: NextFunction
+    ): Promise<void> => {
+      try {
+        const tenantId = req.apiClient!.tenantId;
+        const id = req.params.id as string;
+        const integration = await integrationService.getIntegrationById(tenantId, id);
+        const health = await webhookService.getIntegrationWebhookHealth(
+          tenantId,
+          integration.webhook_endpoint_id
+        );
+        sendSuccess(res, { integration_id: id, ...health }, 200);
+      } catch (error) {
+        next(error);
+      }
+    },
+
+    getDeadLetters: async (
+      req: AuthenticatedRequest,
+      res: Response,
+      next: NextFunction
+    ): Promise<void> => {
+      try {
+        const tenantId = req.apiClient!.tenantId;
+        const id = req.params.id as string;
+        await integrationService.getIntegrationById(tenantId, id);
+        const deadLetters = await webhookService.getDeadLetters(tenantId);
+        sendSuccess(res, { integration_id: id, dead_letters: deadLetters }, 200);
+      } catch (error) {
+        next(error);
+      }
+    },
   };
 }
 
@@ -112,4 +152,6 @@ export const {
   updateIntegration,
   revokeIntegration,
   rotateSecret,
+  getWebhookHealth,
+  getDeadLetters,
 } = createAdminIntegrationsController();
