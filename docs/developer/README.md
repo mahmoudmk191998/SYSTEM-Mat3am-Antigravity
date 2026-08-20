@@ -25,5 +25,6 @@ Welcome to the **Universal RMS Developer Portal**. This platform provides secure
 - [Idempotency & Fingerprinting](idempotency.md)
 - [Security & Anti-SSRF Protection](security.md)
 - [API Versioning Strategy](versioning.md)
+- [Interactive Developer Playground](playground.md)
 - [Official TypeScript SDK (@rms/sdk)](sdk.md)
 - [Troubleshooting & FAQs](troubleshooting.md)

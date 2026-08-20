@@ -29,6 +29,7 @@ import AuditLog from "./pages/AuditLog";
 import Integrations from "./pages/Integrations";
 import Permissions from "./pages/Permissions";
 import Docs from "./pages/Docs";
+import DeveloperPlayground from "./pages/DeveloperPlayground";
 import NotFound from "./pages/NotFound";
 import Expenses from "./pages/Expenses";
 import Suppliers from "./pages/Suppliers";
@@ -118,6 +119,8 @@ function AppRoutes() {
       <Route path="/settings" element={<ProtectedRoute requiredPerms={['settings.view']}><Settings /></ProtectedRoute>} />
       <Route path="/audit" element={<ProtectedRoute requiredPerms={['audit.view']}><AuditLog /></ProtectedRoute>} />
       <Route path="/integrations" element={<ProtectedRoute requiredPerms={['integrations.view']}><Integrations /></ProtectedRoute>} />
+      <Route path="/developer/playground" element={<ProtectedRoute requiredPerms={['integrations.view']}><DeveloperPlayground /></ProtectedRoute>} />
+      <Route path="/playground" element={<ProtectedRoute requiredPerms={['integrations.view']}><DeveloperPlayground /></ProtectedRoute>} />
       <Route path="/permissions" element={<ProtectedRoute requiredPerms={['permissions.manage']}><Permissions /></ProtectedRoute>} />
       <Route path="/docs" element={<ProtectedRoute requiredPerms={['dashboard.view']}><Docs /></ProtectedRoute>} />
       <Route path="/expenses" element={<ProtectedRoute requiredPerms={['expenses.view']}><Expenses /></ProtectedRoute>} />

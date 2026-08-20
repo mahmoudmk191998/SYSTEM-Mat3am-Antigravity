@@ -7,6 +7,10 @@ import { ForbiddenError, UnauthorizedError } from '../utils/errors.js';
 export function createAuthMiddleware(clientService: ApiClientService = defaultApiClientService) {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
+      if (req.apiClient) {
+        return next();
+      }
+
       const authHeader = req.header('Authorization');
 
       if (!authHeader) {
