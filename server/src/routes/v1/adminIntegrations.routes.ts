@@ -7,6 +7,7 @@ import {
   revokeIntegration,
   rotateSecret,
   getWebhookHealth,
+  getIntegrationMetrics,
   getDeadLetters,
 } from '../../controllers/adminIntegrations.controller.js';
 import { authenticateApiKey } from '../../middleware/auth.middleware.js';
@@ -75,6 +76,14 @@ adminIntegrationsRouter.get(
   authenticateApiKey,
   requirePermission('api_clients:manage'),
   getWebhookHealth
+);
+
+// GET /admin/integrations/:id/metrics (Detailed integration-level metrics & p95 latency)
+adminIntegrationsRouter.get(
+  '/admin/integrations/:id/metrics',
+  authenticateApiKey,
+  requirePermission('api_clients:manage'),
+  getIntegrationMetrics
 );
 
 // GET /admin/integrations/:id/dead-letters (Inspect failed webhook events)

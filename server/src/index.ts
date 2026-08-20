@@ -9,6 +9,7 @@ import { analyticsMiddleware } from './middleware/analytics.middleware.js';
 import { createRateLimiter } from './middleware/rateLimiter.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
 import { v1Router } from './routes/v1/index.js';
+import { v2Router } from './routes/v2/index.js';
 import { NotFoundError } from './utils/errors.js';
 import { logger } from './utils/logger.js';
 import { defaultWebhookService } from './services/webhook.service.js';
@@ -43,8 +44,9 @@ export function createApp(): express.Application {
   // 7. Configurable Rate Limiting
   app.use(createRateLimiter());
 
-  // 8. Mount API v1 Routes
+  // 8. Mount API Routes
   app.use('/api/v1', v1Router);
+  app.use('/api/v2', v2Router);
 
   // 8. 404 handler for unmatched routes
   app.use((req, res, next) => {

@@ -128,6 +128,21 @@ export function createAdminIntegrationsController(
       }
     },
 
+    getIntegrationMetrics: async (
+      req: AuthenticatedRequest,
+      res: Response,
+      next: NextFunction
+    ): Promise<void> => {
+      try {
+        const tenantId = req.apiClient!.tenantId;
+        const id = req.params.id as string;
+        const metrics = await integrationHealthService.getIntegrationDetailedMetrics(tenantId, id);
+        sendSuccess(res, metrics, 200);
+      } catch (error) {
+        next(error);
+      }
+    },
+
     getDeadLetters: async (
       req: AuthenticatedRequest,
       res: Response,
@@ -154,5 +169,6 @@ export const {
   revokeIntegration,
   rotateSecret,
   getWebhookHealth,
+  getIntegrationMetrics,
   getDeadLetters,
 } = createAdminIntegrationsController();

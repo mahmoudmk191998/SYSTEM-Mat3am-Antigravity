@@ -1,0 +1,39 @@
+{
+  "name": "@rms/sdk",
+  "version": "1.0.0",
+  "description": "Official Universal TypeScript/JavaScript SDK for Restaurant Management System (RMS) API",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "rms",
+    "restaurant",
+    "sdk",
+    "api",
+    "pos",
+    "online-ordering",
+    "kiosk",
+    "webhooks"
+  ],
+  "author": "RMS Engineering Team",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

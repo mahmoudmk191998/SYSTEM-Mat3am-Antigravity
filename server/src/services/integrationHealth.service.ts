@@ -2,6 +2,7 @@ import { defaultWebhookService, WebhookService } from './webhook.service.js';
 import { defaultCircuitBreaker } from '../infrastructure/circuit-breaker/circuitBreaker.js';
 import { CircuitBreaker } from '../infrastructure/circuit-breaker/circuitBreaker.types.js';
 import { defaultIntegrationService, IntegrationService } from './integration.service.js';
+import { defaultAnalyticsService, AnalyticsService } from './analytics.service.js';
 
 export interface IntegrationHealthReport {
   integration_id: string;
@@ -19,19 +20,43 @@ export interface IntegrationHealthReport {
   endpoint_url?: string;
 }
 
+export interface IntegrationDetailedMetrics {
+  integration_id: string;
+  tenant_id: string;
+  name: string;
+  type: string;
+  request_count: number;
+  success_count: number;
+  count_4xx: number;
+  count_5xx: number;
+  average_latency_ms: number;
+  p95_latency_ms: number;
+  rate_limit_violations: number;
+  webhook_success_rate: number;
+  webhook_failures: number;
+  dead_letter_count: number;
+  circuit_state: 'CLOSED' | 'OPEN' | 'HALF_OPEN';
+  health_score: number;
+  last_successful_request?: string;
+  last_webhook_delivery?: string;
+}
+
 export class IntegrationHealthService {
   private webhookService: WebhookService;
   private integrationService: IntegrationService;
   private circuitBreaker: CircuitBreaker;
+  private analyticsService: AnalyticsService;
 
   constructor(
     webhookService: WebhookService = defaultWebhookService,
     integrationService: IntegrationService = defaultIntegrationService,
-    circuitBreaker: CircuitBreaker = defaultCircuitBreaker
+    circuitBreaker: CircuitBreaker = defaultCircuitBreaker,
+    analyticsService: AnalyticsService = defaultAnalyticsService
   ) {
     this.webhookService = webhookService;
     this.integrationService = integrationService;
     this.circuitBreaker = circuitBreaker;
+    this.analyticsService = analyticsService;
   }
 
   /**
@@ -58,23 +83,17 @@ export class IntegrationHealthService {
     const total = webhookHealth.total_deliveries;
 
     if (total > 0) {
-      // 1. Success rate weight (up to 50 pts)
       const successScore = (webhookHealth.successful_deliveries / total) * 50;
-
-      // 2. Failure rate penalty (up to -30 pts)
       const failurePenalty = (webhookHealth.failed_deliveries / total) * 30;
 
-      // 3. Circuit breaker penalty
       let circuitPenalty = 0;
       if (circuitState === 'OPEN') circuitPenalty = 30;
       else if (circuitState === 'HALF_OPEN') circuitPenalty = 15;
 
-      // 4. Latency penalty
       let latencyPenalty = 0;
       if (webhookHealth.avg_response_time_ms > 5000) latencyPenalty = 20;
       else if (webhookHealth.avg_response_time_ms > 2000) latencyPenalty = 10;
 
-      // 5. Dead letters penalty (-5 per dead letter, max 20)
       const deadLetterPenalty = Math.min(20, webhookHealth.dead_letter_count * 5);
 
       healthScore = Math.max(
@@ -113,6 +132,46 @@ export class IntegrationHealthService {
       last_success_at: webhookHealth.last_success_at,
       last_failure_at: webhookHealth.last_failure_at,
       endpoint_url: webhookHealth.endpoint_url,
+    };
+  }
+
+  /**
+   * Fetches detailed integration-level observability metrics
+   */
+  async getIntegrationDetailedMetrics(
+    tenantId: string,
+    integrationId: string
+  ): Promise<IntegrationDetailedMetrics> {
+    const integration = await this.integrationService.getIntegrationById(tenantId, integrationId);
+    const health = await this.getIntegrationHealth(tenantId, integrationId);
+    const usage = await this.analyticsService.getClientUsageAnalytics(tenantId, integration.api_client_id);
+
+    const responseTimes = usage.events.map((e) => e.response_time_ms || 0).sort((a, b) => a - b);
+    const p95Index = Math.floor(responseTimes.length * 0.95);
+    const p95Latency = responseTimes.length > 0 ? responseTimes[p95Index] : usage.avg_response_time_ms;
+
+    const successfulEvents = usage.events.filter((e) => e.status_code >= 200 && e.status_code < 400);
+    const lastSuccessfulRequest = successfulEvents.length > 0 ? successfulEvents[0].timestamp : undefined;
+
+    return {
+      integration_id: integrationId,
+      tenant_id: tenantId,
+      name: integration.name,
+      type: integration.type,
+      request_count: usage.total_requests,
+      success_count: usage.successful_requests,
+      count_4xx: usage.count_4xx,
+      count_5xx: usage.count_5xx,
+      average_latency_ms: usage.avg_response_time_ms,
+      p95_latency_ms: p95Latency,
+      rate_limit_violations: usage.rate_limit_violations,
+      webhook_success_rate: health.success_rate,
+      webhook_failures: health.failure_rate,
+      dead_letter_count: health.dead_letter_count,
+      circuit_state: health.circuit_state,
+      health_score: health.health_score,
+      last_successful_request: lastSuccessfulRequest,
+      last_webhook_delivery: health.last_success_at,
     };
   }
 }
