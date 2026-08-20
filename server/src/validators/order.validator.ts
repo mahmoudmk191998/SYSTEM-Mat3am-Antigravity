@@ -54,3 +54,5 @@ export const createOrderSchema = z
   .strict();
 
 export type CreateOrderBody = z.infer<typeof createOrderSchema>;
+
+export const updateOrderStatusSchema = z.object({ status: z.enum(['preparing', 'ready', 'completed', 'cancelled']) }).strict();

@@ -9,6 +9,7 @@ import { ordersRouter } from './orders.routes.js';
 import { pricingRouter } from './pricing.routes.js';
 import { productsRouter } from './products.routes.js';
 import { settingsRouter } from './settings.routes.js';
+import { webhooksRouter } from './webhooks.routes.js';
 
 export const v1Router = Router();
 
@@ -25,3 +26,4 @@ v1Router.use('/', offersRouter);
 v1Router.use('/', settingsRouter);
 v1Router.use('/', pricingRouter);
 v1Router.use('/', ordersRouter);
+v1Router.use('/', webhooksRouter);
