@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createOrder } from '../../controllers/orders.controller.js';
+import { createOrder, getOrderById } from '../../controllers/orders.controller.js';
 import { authenticateApiKey } from '../../middleware/auth.middleware.js';
 import { requireBranchAccess } from '../../middleware/branch.middleware.js';
 import { requirePermission } from '../../middleware/permission.middleware.js';
@@ -16,4 +16,12 @@ ordersRouter.post(
   requireBranchAccess('branch_id'),
   validateRequest({ body: createOrderSchema }),
   createOrder
+);
+
+// GET /orders/:id
+ordersRouter.get(
+  '/orders/:id',
+  authenticateApiKey,
+  requirePermission('orders:read'),
+  getOrderById
 );

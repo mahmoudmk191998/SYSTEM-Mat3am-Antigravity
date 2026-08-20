@@ -9,13 +9,15 @@ import { ordersRouter } from './orders.routes.js';
 import { pricingRouter } from './pricing.routes.js';
 import { productsRouter } from './products.routes.js';
 import { settingsRouter } from './settings.routes.js';
+import { webhooksRouter } from './webhooks.routes.js';
+import { adminClientsRouter } from './adminClients.routes.js';
 
 export const v1Router = Router();
 
 // Mount Health Route (Public)
 v1Router.use('/', healthRouter);
 
-// Mount Catalog, Pricing, Delivery, Offers, Settings & Orders Routes
+// Mount Catalog, Pricing, Delivery, Offers, Settings, Orders, Webhooks & Admin Clients Routes
 v1Router.use('/', menuRouter);
 v1Router.use('/', categoriesRouter);
 v1Router.use('/', productsRouter);
@@ -25,3 +27,6 @@ v1Router.use('/', offersRouter);
 v1Router.use('/', settingsRouter);
 v1Router.use('/', pricingRouter);
 v1Router.use('/', ordersRouter);
+v1Router.use('/', webhooksRouter);
+v1Router.use('/', adminClientsRouter);
+

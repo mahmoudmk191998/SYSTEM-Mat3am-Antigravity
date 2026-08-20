@@ -9,6 +9,9 @@ const envSchema = z.object({
   
   // Rate limiting config (configurable, not hardcoded)
   API_RATE_LIMIT: z.coerce.number().default(100),
+  API_RATE_LIMIT_DEFAULT: z.coerce.number().default(100),
+  API_RATE_LIMIT_STANDARD: z.coerce.number().default(500),
+  API_RATE_LIMIT_PREMIUM: z.coerce.number().default(2000),
   API_RATE_WINDOW_MS: z.coerce.number().default(60000), // 1 minute
   
   // CORS configuration

@@ -6,6 +6,7 @@ export interface RequestContext {
   tenantId: string;
   allowedBranchIds: string[];
   permissions: ApiPermission[];
+  rateLimitTier?: 'free' | 'standard' | 'premium';
 }
 
 export interface ApiSuccessResponse<T> {

@@ -36,6 +36,7 @@ export function createAuthMiddleware(clientService: ApiClientService = defaultAp
         tenantId: client.tenant_id,
         allowedBranchIds: client.allowed_branch_ids || [],
         permissions: client.permissions || [],
+        rateLimitTier: client.rate_limit_tier,
       };
 
       // Strict Tenant Isolation Guard:

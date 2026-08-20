@@ -5,11 +5,13 @@ import { initFirebaseAdmin } from './config/firebase.js';
 import { createCorsMiddleware } from './middleware/cors.middleware.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { requestLoggerMiddleware } from './middleware/logger.middleware.js';
+import { analyticsMiddleware } from './middleware/analytics.middleware.js';
 import { createRateLimiter } from './middleware/rateLimiter.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
 import { v1Router } from './routes/v1/index.js';
 import { NotFoundError } from './utils/errors.js';
 import { logger } from './utils/logger.js';
+import { defaultWebhookService } from './services/webhook.service.js';
 
 export function createApp(): express.Application {
   const app = express();
@@ -35,10 +37,13 @@ export function createApp(): express.Application {
   // 5. Structured Request Logging
   app.use(requestLoggerMiddleware);
 
-  // 6. Configurable Rate Limiting
+  // 6. Analytics Middleware (Non-blocking usage tracking)
+  app.use(analyticsMiddleware);
+
+  // 7. Configurable Rate Limiting
   app.use(createRateLimiter());
 
-  // 7. Mount API v1 Routes
+  // 8. Mount API v1 Routes
   app.use('/api/v1', v1Router);
 
   // 8. 404 handler for unmatched routes
@@ -57,6 +62,11 @@ export const app = createApp();
 // Start server if run directly
 if (process.env.NODE_ENV !== 'test') {
   initFirebaseAdmin();
+
+  // Durable webhook outbox worker. Failed deliveries retain their retry schedule.
+  setInterval(() => {
+    defaultWebhookService.dispatchDue().catch((error) => logger.error('Webhook delivery sweep failed', { details: error instanceof Error ? error.message : error }));
+  }, 60_000).unref();
 
   app.listen(env.PORT, () => {
     logger.info(`🚀 RMS REST API Server is running`, {

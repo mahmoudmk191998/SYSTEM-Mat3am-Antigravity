@@ -1,73 +1,111 @@
-# Welcome to your Lovable project
+# RMS — Restaurant Management System & REST API Platform
 
-## Project info
+A multi-tenant Restaurant Management System (RMS) with a centralized POS frontend and an enterprise-grade REST API integration layer for external restaurant websites (e.g. Sushi Bar, mobile apps, online ordering portals).
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+---
 
-## How can I edit this code?
+## Architecture Overview
 
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```
+External Restaurant Apps / Websites (e.g. Sushi Bar)
+                  │
+                  ▼ (Official RmsApiClient SDK)
+      HTTPS REST API (/api/v1)
+                  │
+                  ▼ (Tenant & Branch Isolation, Rate Limiting, Idempotency)
+      RMS Backend (Express, Node.js, TypeScript)
+                  │
+                  ▼ (Firebase Admin SDK)
+        Cloud Firestore & Storage
 ```
 
-**Edit a file directly in GitHub**
+---
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Integration SDK (`@rms/sdk`)
 
-**Use GitHub Codespaces**
+The official TypeScript SDK is located at `server/src/integration/` and provides typed methods, error mapping, safe retry, and HMAC webhook verification.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Installation & Initialization
 
-## What technologies are used for this project?
+```typescript
+import { RmsApiClient } from './server/src/integration/index.js';
 
-This project is built with:
+const client = new RmsApiClient({
+  baseUrl: process.env.RMS_BASE_URL || 'http://localhost:4000/api/v1',
+  apiKey: process.env.RMS_API_KEY || 'rms_live_cli_xxxx.rms_sec_yyyy',
+  branchId: 'branch_sushi_main',
+  timeoutMs: 10000,
+});
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Complete Integration Flow (Sushi Bar Example)
 
-## How can I deploy this project?
+```typescript
+// 1. Fetch Menu & Categories
+const menu = await client.getMenu();
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+// 2. Authoritative Price Preview (Server-Side)
+const pricing = await client.previewPricing({
+  branch_id: 'branch_sushi_main',
+  order_type: 'delivery',
+  delivery_zone_id: 'zone_zamalek',
+  coupon_code: 'WELCOME20',
+  items: [{ product_id: 'prod_california', quantity: 2 }]
+});
 
-## Can I connect a custom domain to my Lovable project?
+// 3. Place Order with Idempotency Key
+const order = await client.createOrder({
+  branch_id: 'branch_sushi_main',
+  order_type: 'delivery',
+  delivery: { zone_id: 'zone_zamalek', address: '15 Brazil St, Zamalek' },
+  customer: { name: 'Customer Name', phone: '01012345678' },
+  items: [{ product_id: 'prod_california', quantity: 2 }],
+  payment_method: 'cash'
+}, 'unique_order_idempotency_key');
 
-Yes, you can!
+// 4. Live Order Tracking
+const trackedOrder = await client.getOrder(order.order_id);
+```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+---
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Webhook Verification (HMAC-SHA256)
+
+```typescript
+import { RmsApiClient } from './server/src/integration/index.js';
+
+const verification = RmsApiClient.verifyWebhookSignature(
+  process.env.RMS_WEBHOOK_SECRET!,
+  rawBodyString,
+  req.headers['x-rms-timestamp'],
+  req.headers['x-rms-signature'],
+  300 // 5-minute replay window
+);
+
+if (!verification.isValid) {
+  return res.status(401).send(verification.error);
+}
+```
+
+---
+
+## Environment Variables
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `PORT` | API Server port | `4000` |
+| `NODE_ENV` | Environment mode (`development`, `test`, `production`) | `development` |
+| `API_RATE_LIMIT_DEFAULT` | Requests / min for Free tier | `100` |
+| `API_RATE_LIMIT_STANDARD` | Requests / min for Standard tier | `500` |
+| `API_RATE_LIMIT_PREMIUM` | Requests / min for Premium tier | `2000` |
+| `ALLOWED_ORIGINS` | Comma-separated list of allowed origins | `http://localhost:3000,http://localhost:5173` |
+
+---
+
+## Security Checklist for Production
+
+- [x] **Store API Secrets Securely**: Never expose `rms_sec_` keys in client-side bundles or git repositories.
+- [x] **Server-Authoritative Pricing**: External apps must never calculate totals or modify line prices.
+- [x] **Idempotent Checkout**: Always pass `Idempotency-Key` headers on order submissions.
+- [x] **Replay Protection**: Verify `X-RMS-Timestamp` within 300s window on all webhook endpoints.
+- [x] **Tiered Rate Limiting**: Monitor `X-RateLimit-*` headers and handle `Retry-After` on HTTP 429.

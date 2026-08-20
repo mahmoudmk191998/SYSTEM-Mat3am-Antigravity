@@ -67,12 +67,14 @@ export class BranchesService {
   async getBranchById(tenantId: string, branchId: string): Promise<PublicBranch> {
     let branchData: any = null;
 
-    if (this.useMemory) {
+    if (this.useMemory || inMemoryBranches.has(branchId)) {
       const b = inMemoryBranches.get(branchId);
       if (b && b.tenant_id === tenantId) {
         branchData = b;
       }
-    } else {
+    }
+
+    if (!branchData && !this.useMemory) {
       try {
         const db = getFirestoreDb();
         const doc = await db.collection(COLLECTION_NAME).doc(branchId).get();
