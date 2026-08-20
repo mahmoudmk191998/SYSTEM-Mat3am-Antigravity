@@ -7,12 +7,17 @@ import {
   defaultWebhookService,
   WebhookService,
 } from '../services/webhook.service.js';
+import {
+  defaultIntegrationHealthService,
+  IntegrationHealthService,
+} from '../services/integrationHealth.service.js';
 import { AuthenticatedRequest } from '../types/api.types.js';
 import { sendSuccess } from '../utils/response.js';
 
 export function createAdminIntegrationsController(
   integrationService: IntegrationService = defaultIntegrationService,
-  webhookService: WebhookService = defaultWebhookService
+  webhookService: WebhookService = defaultWebhookService,
+  integrationHealthService: IntegrationHealthService = defaultIntegrationHealthService
 ) {
   return {
     onboardIntegration: async (
@@ -116,12 +121,8 @@ export function createAdminIntegrationsController(
       try {
         const tenantId = req.apiClient!.tenantId;
         const id = req.params.id as string;
-        const integration = await integrationService.getIntegrationById(tenantId, id);
-        const health = await webhookService.getIntegrationWebhookHealth(
-          tenantId,
-          integration.webhook_endpoint_id
-        );
-        sendSuccess(res, { integration_id: id, ...health }, 200);
+        const health = await integrationHealthService.getIntegrationHealth(tenantId, id);
+        sendSuccess(res, health, 200);
       } catch (error) {
         next(error);
       }

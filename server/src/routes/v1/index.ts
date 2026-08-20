@@ -12,6 +12,7 @@ import { settingsRouter } from './settings.routes.js';
 import { webhooksRouter } from './webhooks.routes.js';
 import { adminClientsRouter } from './adminClients.routes.js';
 import { adminIntegrationsRouter } from './adminIntegrations.routes.js';
+import { adminObservabilityRouter } from './adminObservability.routes.js';
 
 export const v1Router = Router();
 
@@ -31,3 +32,4 @@ v1Router.use('/', ordersRouter);
 v1Router.use('/', webhooksRouter);
 v1Router.use('/', adminClientsRouter);
 v1Router.use('/', adminIntegrationsRouter);
+v1Router.use('/', adminObservabilityRouter);

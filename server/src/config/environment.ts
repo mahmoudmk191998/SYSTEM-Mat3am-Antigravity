@@ -18,13 +18,23 @@ const envSchema = z.object({
   // Redis Configuration (Optional for distributed deployments)
   REDIS_URL: z.string().optional(),
   REDIS_RATE_LIMIT_PREFIX: z.string().default('rms:ratelimit:'),
+  REDIS_QUEUE_PREFIX: z.string().default('rms:webhook_queue:'),
   
   // Webhook Queue & Worker Configuration
   WEBHOOK_QUEUE_PROVIDER: z.enum(['in-memory', 'redis']).default('in-memory'),
+  WEBHOOK_WORKER_ENABLED: z.coerce.boolean().default(true),
+  WEBHOOK_WORKER_CONCURRENCY: z.coerce.number().default(5),
+  WEBHOOK_LEASE_SECONDS: z.coerce.number().default(60),
+  WEBHOOK_POLL_INTERVAL_MS: z.coerce.number().default(1000),
   WEBHOOK_MAX_ATTEMPTS: z.coerce.number().default(5),
   WEBHOOK_BASE_DELAY_SECONDS: z.coerce.number().default(10),
   WEBHOOK_MAX_DELAY_SECONDS: z.coerce.number().default(300),
   WEBHOOK_REQUEST_TIMEOUT_MS: z.coerce.number().default(10000),
+
+  // Circuit Breaker Configuration
+  WEBHOOK_CIRCUIT_FAILURE_THRESHOLD: z.coerce.number().default(5),
+  WEBHOOK_CIRCUIT_COOLDOWN_SECONDS: z.coerce.number().default(60),
+  WEBHOOK_CIRCUIT_HALF_OPEN_REQUESTS: z.coerce.number().default(1),
 
   // CORS configuration
   ALLOWED_ORIGINS: z.string().default('http://localhost:3000,http://localhost:5173,http://localhost:4000'),

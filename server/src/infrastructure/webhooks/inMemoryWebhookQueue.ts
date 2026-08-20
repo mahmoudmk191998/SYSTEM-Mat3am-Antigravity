@@ -15,22 +15,35 @@ export class InMemoryWebhookQueue implements WebhookQueue {
       (j) => j.event_id === job.event_id && j.endpoint_id === job.endpoint_id
     );
     if (!existing) {
+      job.state = 'ready';
       this.jobs.set(job.job_id, job);
     }
   }
 
   async dequeue(limit: number = 10): Promise<QueuedWebhookJob[]> {
+    return this.claim('default_worker', limit, 60);
+  }
+
+  async claim(workerId: string, limit: number = 10, leaseSeconds: number = 60): Promise<QueuedWebhookJob[]> {
     const now = new Date().toISOString();
-    const readyJobs: QueuedWebhookJob[] = [];
+    const leaseUntil = new Date(Date.now() + leaseSeconds * 1000).toISOString();
+    const claimed: QueuedWebhookJob[] = [];
 
     for (const job of this.jobs.values()) {
-      if (job.next_attempt_at <= now) {
-        readyJobs.push(job);
-        if (readyJobs.length >= limit) break;
+      const isReady = !job.state || job.state === 'ready';
+      const isExpiredLease = job.state === 'processing' && job.lease_until && job.lease_until <= now;
+
+      if ((isReady || isExpiredLease) && job.next_attempt_at <= now) {
+        job.state = 'processing';
+        job.claimed_by = workerId;
+        job.lease_until = leaseUntil;
+        this.jobs.set(job.job_id, job);
+        claimed.push({ ...job });
+        if (claimed.length >= limit) break;
       }
     }
 
-    return readyJobs;
+    return claimed;
   }
 
   async ack(jobId: string): Promise<void> {
@@ -43,11 +56,14 @@ export class InMemoryWebhookQueue implements WebhookQueue {
       const nextTime = new Date(Date.now() + delaySeconds * 1000).toISOString();
       job.attempt_count += 1;
       job.next_attempt_at = nextTime;
+      job.state = 'ready';
+      job.claimed_by = undefined;
+      job.lease_until = undefined;
       this.jobs.set(jobId, job);
     }
   }
 
-  async fail(jobId: string, reason: string, statusCode?: number): Promise<void> {
+  async fail(jobId: string, reason: string, statusCode?: number | null): Promise<void> {
     const job = this.jobs.get(jobId);
     if (job) {
       this.jobs.delete(jobId);
@@ -65,8 +81,26 @@ export class InMemoryWebhookQueue implements WebhookQueue {
         last_status_code: statusCode,
         failed_at: new Date().toISOString(),
         next_action: 'inspect_endpoint_or_manual_retry',
+        correlation_id: job.correlation_id,
       });
     }
+  }
+
+  async recoverExpiredLeases(): Promise<number> {
+    const now = new Date().toISOString();
+    let recoveredCount = 0;
+
+    for (const job of this.jobs.values()) {
+      if (job.state === 'processing' && job.lease_until && job.lease_until <= now) {
+        job.state = 'ready';
+        job.claimed_by = undefined;
+        job.lease_until = undefined;
+        this.jobs.set(job.job_id, job);
+        recoveredCount += 1;
+      }
+    }
+
+    return recoveredCount;
   }
 
   async getPendingCount(tenantId?: string): Promise<number> {
@@ -82,10 +116,12 @@ export class InMemoryWebhookQueue implements WebhookQueue {
   }
 
   async getStatus(): Promise<WebhookQueueStatus> {
+    const processing = Array.from(this.jobs.values()).filter((j) => j.state === 'processing').length;
     return {
       provider: 'in-memory',
       status: 'healthy',
       pending_jobs: this.jobs.size,
+      processing_jobs: processing,
       dead_letters_count: this.deadLetters.length,
     };
   }
