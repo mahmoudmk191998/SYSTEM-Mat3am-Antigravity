@@ -26,8 +26,10 @@ import {
   RmsServerError,
   RmsValidationError,
 } from './errors.js';
+import { RmsRealtimeClient } from './realtime.js';
 
 export class RmsApiClient {
+  public readonly events: RmsRealtimeClient;
   private baseUrl: string;
   private apiKey: string;
   private timeoutMs: number;
@@ -49,6 +51,7 @@ export class RmsApiClient {
     this.maxRetries = config.maxRetries !== undefined ? config.maxRetries : 2;
     this.defaultBranchId = config.defaultBranchId;
     this.fetchImpl = config.fetch || globalThis.fetch;
+    this.events = new RmsRealtimeClient(this.baseUrl, this.apiKey, this.defaultBranchId);
   }
 
   private async request<T>(

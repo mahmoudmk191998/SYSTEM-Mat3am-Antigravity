@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { defaultOrderService, OrderService } from '../services/order.service.js';
 import { defaultWebhookService } from '../services/webhook.service.js';
+import { defaultEventPublisher } from '../realtime/events/eventPublisher.js';
 import { AuthenticatedRequest } from '../types/api.types.js';
 import { ForbiddenError, NotFoundError } from '../utils/errors.js';
 import { sendSuccess } from '../utils/response.js';
@@ -16,6 +17,7 @@ export function createOrdersController(orderService: OrderService = defaultOrder
         const tenantId = req.apiClient!.tenantId;
         const clientId = req.apiClient!.clientId;
         const idempotencyKey = req.header('Idempotency-Key');
+        const requestId = req.header('X-Request-ID');
 
         const result = await orderService.createOrder(
           tenantId,
@@ -24,8 +26,18 @@ export function createOrdersController(orderService: OrderService = defaultOrder
           idempotencyKey
         );
 
+        // 1. Trigger Webhooks
         defaultWebhookService
           .triggerEvent(tenantId, 'order.created', result.order_id, result as any)
+          .catch(() => {});
+
+        // 2. Publish Real-Time Event
+        defaultEventPublisher
+          .publish(tenantId, 'order.created', 'order', result.order_id, result, {
+            branch_id: req.body.branch_id,
+            request_id: requestId,
+            integration_id: clientId,
+          })
           .catch(() => {});
 
         sendSuccess(res, result, 201);
@@ -69,8 +81,10 @@ export function createOrdersController(orderService: OrderService = defaultOrder
     ): Promise<void> => {
       try {
         const tenantId = req.apiClient!.tenantId;
+        const clientId = req.apiClient!.clientId;
         const orderId = req.params.id as string;
         const allowedBranches = req.apiClient?.allowedBranchIds || [];
+        const requestId = req.header('X-Request-ID');
 
         const updated = await orderService.transitionStatus(
           tenantId,
@@ -79,11 +93,35 @@ export function createOrdersController(orderService: OrderService = defaultOrder
           allowedBranches
         );
 
+        const publicOrder = orderService.toPublicOrder(updated);
+
+        // 1. Trigger Webhooks
         defaultWebhookService
           .triggerEvent(tenantId, 'order.status_updated', orderId, updated as any)
           .catch(() => {});
 
-        sendSuccess(res, orderService.toPublicOrder(updated), 200);
+        // 2. Publish Real-Time Event
+        defaultEventPublisher
+          .publish(
+            tenantId,
+            'order.status_changed',
+            'order',
+            orderId,
+            {
+              order_id: orderId,
+              order_number: updated.order_number,
+              status: req.body.status,
+              updated_at: updated.updated_at,
+            },
+            {
+              branch_id: updated.branch_id,
+              request_id: requestId,
+              integration_id: clientId,
+            }
+          )
+          .catch(() => {});
+
+        sendSuccess(res, publicOrder, 200);
       } catch (error) {
         next(error);
       }

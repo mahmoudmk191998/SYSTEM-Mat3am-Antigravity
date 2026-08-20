@@ -1,4 +1,6 @@
 export { RmsApiClient } from './client.js';
+export { RmsRealtimeClient } from './realtime.js';
+export { RmsEventStream, type EventStreamOptions } from './events.js';
 export {
   RmsError,
   RmsAuthError,
@@ -37,4 +39,5 @@ export type {
   OrderResponse,
   OrderTrackingInfo,
   WebhookEventPayload,
+  PublicRmsEvent,
 } from './types.js';

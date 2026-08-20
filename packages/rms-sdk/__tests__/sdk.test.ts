@@ -365,4 +365,22 @@ describe('Phase 8B: Official @rms/sdk Test Suite', () => {
       })
     ).toBe(false);
   });
+
+  // ==================== PART 7: Real-Time Event Streaming ====================
+
+  it('19. client.events.subscribe returns an active RmsEventStream', () => {
+    const client = new RmsApiClient({ baseUrl: BASE_URL, apiKey: API_KEY });
+    const stream = client.events.subscribe({ types: ['order.created'], branchId: 'branch_1' });
+    expect(stream).toBeDefined();
+    expect(typeof stream.close).toBe('function');
+    stream.close();
+  });
+
+  it('20. client.events.streamOrder subscribes to order lifecycle events', () => {
+    const client = new RmsApiClient({ baseUrl: BASE_URL, apiKey: API_KEY });
+    const stream = client.events.streamOrder('ord_999');
+    expect(stream).toBeDefined();
+    expect(typeof stream.close).toBe('function');
+    stream.close();
+  });
 });

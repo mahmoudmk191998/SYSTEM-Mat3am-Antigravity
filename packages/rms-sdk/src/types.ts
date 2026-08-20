@@ -210,3 +210,18 @@ export interface WebhookEventPayload<T = any> {
   timestamp: string;
   data: T;
 }
+
+export interface PublicRmsEvent<T = any> {
+  id: string;
+  type: string;
+  version: string;
+  tenant_id: string;
+  integration_id?: string;
+  branch_id?: string;
+  resource_type: string;
+  resource_id: string;
+  request_id: string;
+  timestamp: string;
+  data: T;
+  metadata?: Record<string, any>;
+}
