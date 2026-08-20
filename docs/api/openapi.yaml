@@ -1,0 +1,822 @@
+openapi: 3.0.3
+info:
+  title: RMS Restaurant Management System - Public SaaS REST API
+  description: >
+    Public REST API allowing external restaurant websites and client applications (e.g. Sushi Bar)
+    to query menu catalogs, categories, branches, delivery zones, promotions, and settings safely
+    under multi-tenant isolation.
+  version: 1.0.0
+servers:
+  - url: http://localhost:4000/api/v1
+    description: Local Development Server
+  - url: https://api.rms.example.com/api/v1
+    description: Production API Gateway
+
+components:
+  securitySchemes:
+    ApiKeyBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: rms_live_<clientId>.<secret>
+      description: API Key credential issued to the restaurant client.
+
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        request_id:
+          type: string
+          example: 6954d013-acf1-465d-979b-e4b20420532a
+
+    ApiError:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: FORBIDDEN
+            message:
+              type: string
+              example: Permission denied. Missing required permission 'menu:read'
+            details:
+              type: object
+
+    PublicCategory:
+      type: object
+      properties:
+        id:
+          type: string
+          example: cat_sushi_rolls
+        name:
+          type: string
+          example: سوشي رول
+        name_en:
+          type: string
+          example: Sushi Rolls
+        icon:
+          type: string
+          example: 🍣
+        color:
+          type: string
+          example: bg-primary
+        sort_order:
+          type: integer
+          example: 1
+
+    PublicMenuItem:
+      type: object
+      properties:
+        id:
+          type: string
+          example: prod_california
+        category_id:
+          type: string
+          nullable: true
+          example: cat_sushi_rolls
+        name:
+          type: string
+          example: كاليفورنيا رول
+        name_en:
+          type: string
+          example: California Roll
+        description:
+          type: string
+          example: كراب طازج مع أفوكادو وخيار
+        description_en:
+          type: string
+          example: Fresh crab with avocado and cucumber
+        price:
+          type: number
+          example: 150
+        image_url:
+          type: string
+          nullable: true
+          example: https://cdn.example.com/california.jpg
+        preparation_time:
+          type: integer
+          example: 15
+        calories:
+          type: integer
+          nullable: true
+          example: 320
+        allergens:
+          type: array
+          items:
+            type: string
+          example: ["fish", "crustaceans"]
+        is_available:
+          type: boolean
+          example: true
+
+    PublicBranch:
+      type: object
+      properties:
+        id:
+          type: string
+          example: branch_sushi_main
+        name:
+          type: string
+          example: Sushi Bar Main Branch
+        address:
+          type: string
+          example: 123 Ocean Ave
+        phone:
+          type: string
+          example: 01011111111
+        is_active:
+          type: boolean
+          example: true
+
+    PublicDeliveryZone:
+      type: object
+      properties:
+        id:
+          type: string
+          example: zone_zamalek
+        name:
+          type: string
+          example: الزمالك
+        price:
+          type: number
+          example: 35
+        estimated_time:
+          type: integer
+          example: 40
+
+    PublicOffer:
+      type: object
+      properties:
+        id:
+          type: string
+          example: promo_active_10
+        name:
+          type: string
+          example: خصم الافتتاح 10%
+        type:
+          type: string
+          enum: [percentage, fixed, free_delivery]
+          example: percentage
+        value:
+          type: number
+          example: 10
+        min_order:
+          type: number
+          example: 200
+        max_discount:
+          type: number
+          nullable: true
+          example: 50
+        start_date:
+          type: string
+          format: date-time
+        end_date:
+          type: string
+          format: date-time
+        is_active:
+          type: boolean
+          example: true
+
+    PublicRestaurantSettings:
+      type: object
+      properties:
+        restaurant_name:
+          type: string
+          example: Sushi Bar Cairo
+        logo:
+          type: string
+          example: https://cdn.example.com/sushi-logo.png
+        currency:
+          type: string
+          example: EGP
+        locale:
+          type: string
+          example: ar-EG
+        timezone:
+          type: string
+          example: Africa/Cairo
+        tax_rate:
+          type: number
+          example: 14
+        tax_included:
+          type: boolean
+          example: false
+        phone:
+          type: string
+          example: 01000000000
+        address:
+          type: string
+          example: Cairo, Egypt
+        primary_color:
+          type: string
+          example: "#ea580c"
+
+security:
+  - ApiKeyBearerAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health Check
+      security: []
+      responses:
+        200:
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  service:
+                    type: string
+                    example: rms-api
+                  version:
+                    type: string
+                    example: v1
+
+  /menu:
+    get:
+      summary: Complete Public Menu Catalog
+      parameters:
+        - name: branch_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: X-Branch-ID
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        200:
+          description: Full menu catalog with categories and products
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          categories:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/PublicCategory'
+                          products:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/PublicMenuItem'
+                          branch:
+                            $ref: '#/components/schemas/PublicBranch'
+        401:
+          $ref: '#/components/schemas/ApiError'
+        403:
+          $ref: '#/components/schemas/ApiError'
+
+  /categories:
+    get:
+      summary: List Active Menu Categories
+      responses:
+        200:
+          description: List of sorted categories
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PublicCategory'
+
+  /products:
+    get:
+      summary: List Products with Filtering & Pagination
+      parameters:
+        - name: category_id
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: available_only
+          in: query
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        200:
+          description: List of products
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PublicMenuItem'
+
+  /products/{id}:
+    get:
+      summary: Get Product Details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Product details
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PublicMenuItem'
+        404:
+          description: Product not found
+
+  /products/{id}/availability:
+    get:
+      summary: Check Product Availability
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: branch_id
+          in: query
+          schema:
+            type: string
+      responses:
+        200:
+          description: Availability status
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          available:
+                            type: boolean
+                          reason:
+                            type: string
+                            nullable: true
+                            enum: [out_of_stock, disabled, branch_unavailable, not_found, null]
+
+  /branches:
+    get:
+      summary: List Restaurant Branches
+      responses:
+        200:
+          description: List of active branches
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PublicBranch'
+
+  /delivery-zones:
+    get:
+      summary: List Delivery Zones
+      parameters:
+        - name: branch_id
+          in: query
+          schema:
+            type: string
+      responses:
+        200:
+          description: List of delivery zones
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PublicDeliveryZone'
+
+  /delivery-zones/check:
+    post:
+      summary: Validate Delivery Zone and Calculate Fee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - zone_id
+              properties:
+                zone_id:
+                  type: string
+                branch_id:
+                  type: string
+      responses:
+        200:
+          description: Delivery fee calculation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          available:
+                            type: boolean
+                          delivery_fee:
+                            type: number
+                          estimated_time:
+                            type: integer
+        404:
+          description: Delivery zone not found
+
+  /offers:
+    get:
+      summary: List Active Promotions & Offers
+      responses:
+        200:
+          description: List of active promotions
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PublicOffer'
+
+  /settings:
+    get:
+      summary: Public Restaurant Branding & Settings
+      responses:
+        200:
+          description: Public settings
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PublicRestaurantSettings'
+
+  /pricing/preview:
+    post:
+      summary: Server-Side Order Pricing Preview & Calculation
+      description: >
+        Calculates authoritative product prices, addons, subtotal, discounts,
+        delivery fees, taxes, and final payable grand total. Client prices and
+        totals are strictly ignored/rejected.
+      parameters:
+        - name: X-Branch-ID
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - branch_id
+                - order_type
+                - items
+              properties:
+                branch_id:
+                  type: string
+                  example: branch_sushi_main
+                order_type:
+                  type: string
+                  enum: [dine_in, takeaway, delivery, curbside]
+                  example: delivery
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - product_id
+                      - quantity
+                    properties:
+                      product_id:
+                        type: string
+                        example: prod_california
+                      quantity:
+                        type: integer
+                        minimum: 1
+                        maximum: 999
+                        example: 2
+                      addon_ids:
+                        type: array
+                        items:
+                          type: string
+                        example: ["addon_extra_ginger", "addon_spicy_mayo"]
+                      notes:
+                        type: string
+                coupon_code:
+                  type: string
+                  example: WELCOME20
+                promotion_id:
+                  type: string
+                delivery:
+                  type: object
+                  properties:
+                    zone_id:
+                      type: string
+                      example: zone_zamalek
+                    address:
+                      type: string
+      responses:
+        200:
+          description: Detailed authoritative pricing breakdown
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          tenant_id:
+                            type: string
+                          branch_id:
+                            type: string
+                          order_type:
+                            type: string
+                          currency:
+                            type: string
+                            example: EGP
+                          items:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                product_id:
+                                  type: string
+                                name:
+                                  type: string
+                                quantity:
+                                  type: integer
+                                unit_price:
+                                  type: number
+                                addons_total:
+                                  type: number
+                                line_subtotal:
+                                  type: number
+                                discount:
+                                  type: number
+                                line_total:
+                                  type: number
+                          subtotal:
+                            type: number
+                            example: 600
+                          discounts:
+                            type: array
+                            items:
+                              type: object
+                          discount_total:
+                            type: number
+                            example: 60
+                          delivery_fee:
+                            type: number
+                            example: 45
+                          tax_rate:
+                            type: number
+                            example: 14
+                          tax_included:
+                            type: boolean
+                            example: false
+                          tax_amount:
+                            type: number
+                            example: 75.6
+                          grand_total:
+                            type: number
+                            example: 660.6
+                          calculated_at:
+                            type: string
+                            format: date-time
+        400:
+          $ref: '#/components/schemas/ApiError'
+        403:
+          $ref: '#/components/schemas/ApiError'
+        404:
+          $ref: '#/components/schemas/ApiError'
+
+  /orders:
+    post:
+      summary: Create a Secure, Authoritatively-Priced Order
+      description: >
+        Creates an immutable historical order in the RMS with atomic order numbering,
+        server-calculated pricing, idempotency deduplication, and customer snapshotting.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Unique client key for deduplication and retry protection.
+        - name: X-Branch-ID
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - branch_id
+                - order_type
+                - items
+              properties:
+                branch_id:
+                  type: string
+                  example: branch_sushi_main
+                order_type:
+                  type: string
+                  enum: [dine_in, takeaway, delivery, curbside]
+                  example: delivery
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - product_id
+                      - quantity
+                    properties:
+                      product_id:
+                        type: string
+                        example: prod_california
+                      quantity:
+                        type: integer
+                        minimum: 1
+                        maximum: 999
+                        example: 2
+                      addon_ids:
+                        type: array
+                        items:
+                          type: string
+                        example: ["addon_extra_ginger", "addon_spicy_mayo"]
+                      notes:
+                        type: string
+                customer:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      example: أحمد محمود
+                    phone:
+                      type: string
+                      example: "01012345678"
+                    address:
+                      type: string
+                      example: شارع 26 يوليو، الزمالك
+                delivery:
+                  type: object
+                  properties:
+                    zone_id:
+                      type: string
+                      example: zone_zamalek
+                    address:
+                      type: string
+                coupon_code:
+                  type: string
+                  example: WELCOME20
+                promotion_id:
+                  type: string
+                payment_method:
+                  type: string
+                  example: cash
+                notes:
+                  type: string
+                  example: بدون شطة
+      responses:
+        201:
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          order_id:
+                            type: string
+                            example: ord_a1b2c3d4e5f6g7h8i9j0
+                          order_number:
+                            type: string
+                            example: "#105"
+                          status:
+                            type: string
+                            example: pending
+                          payment_status:
+                            type: string
+                            example: pending
+                          pricing:
+                            type: object
+                            properties:
+                              subtotal:
+                                type: number
+                                example: 600
+                              discount_total:
+                                type: number
+                                example: 100
+                              delivery_fee:
+                                type: number
+                                example: 45
+                              tax_rate:
+                                type: number
+                                example: 14
+                              tax_amount:
+                                type: number
+                                example: 70
+                              grand_total:
+                                type: number
+                                example: 615
+                              currency:
+                                type: string
+                                example: EGP
+                          items_count:
+                            type: integer
+                            example: 1
+                          created_at:
+                            type: string
+                            format: date-time
+        400:
+          $ref: '#/components/schemas/ApiError'
+        401:
+          $ref: '#/components/schemas/ApiError'
+        403:
+          $ref: '#/components/schemas/ApiError'
+        409:
+          description: Idempotency Key Reused with Different Payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+
