@@ -4,6 +4,8 @@ import { AuthenticatedRequest } from '../types/api.types.js';
 import { PublicOrderResponse } from '../types/order.types.js';
 import { ForbiddenError, NotFoundError } from '../utils/errors.js';
 import { sendSuccess } from '../utils/response.js';
+import { NotFoundError } from '../utils/errors.js';
+import { defaultWebhookService } from '../services/webhook.service.js';
 
 export function createOrdersController(orderService: OrderService = defaultOrderService) {
   return {
@@ -23,6 +25,8 @@ export function createOrdersController(orderService: OrderService = defaultOrder
           req.body,
           idempotencyKey
         );
+
+        await defaultWebhookService.emit(tenantId, 'order.created', result as unknown as Record<string, unknown>);
 
         sendSuccess(res, result, 201);
       } catch (error) {

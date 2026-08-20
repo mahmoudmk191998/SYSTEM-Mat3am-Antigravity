@@ -4,7 +4,7 @@ import { authenticateApiKey } from '../../middleware/auth.middleware.js';
 import { requireBranchAccess } from '../../middleware/branch.middleware.js';
 import { requirePermission } from '../../middleware/permission.middleware.js';
 import { validateRequest } from '../../middleware/validator.middleware.js';
-import { createOrderSchema } from '../../validators/order.validator.js';
+import { createOrderSchema, updateOrderStatusSchema } from '../../validators/order.validator.js';
 
 export const ordersRouter = Router();
 
