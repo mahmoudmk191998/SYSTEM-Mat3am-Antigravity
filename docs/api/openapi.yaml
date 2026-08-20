@@ -1364,3 +1364,130 @@ paths:
                                   type: string
         404:
           $ref: '#/components/schemas/ApiError'
+
+  /admin/integrations:
+    post:
+      summary: Onboard new universal integration
+      description: Creates an integration, underlying API client, and optional Webhook in one step.
+      tags:
+        - Admin Integrations
+      security:
+        - ApiKeyBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - type
+                - permissions
+              properties:
+                name:
+                  type: string
+                type:
+                  type: string
+                  enum: [custom_website, mobile_app, kiosk, delivery_aggregator, pos_terminal, third_party_service, other]
+                allowed_branch_ids:
+                  type: array
+                  items:
+                    type: string
+                allowed_origins:
+                  type: array
+                  items:
+                    type: string
+                permissions:
+                  type: array
+                  items:
+                    type: string
+                rate_limit_tier:
+                  type: string
+                  enum: [free, standard, premium]
+                webhook_url:
+                  type: string
+                webhook_events:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        201:
+          description: Integration onboarded successfully
+        400:
+          $ref: '#/components/schemas/ApiError'
+    get:
+      summary: List universal integrations
+      tags:
+        - Admin Integrations
+      security:
+        - ApiKeyBearerAuth: []
+      responses:
+        200:
+          description: List of integrations
+
+  /admin/integrations/{id}:
+    get:
+      summary: Get integration details
+      tags:
+        - Admin Integrations
+      security:
+        - ApiKeyBearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Integration details
+        404:
+          $ref: '#/components/schemas/ApiError'
+    patch:
+      summary: Update integration
+      tags:
+        - Admin Integrations
+      security:
+        - ApiKeyBearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Updated integration
+    delete:
+      summary: Revoke integration
+      tags:
+        - Admin Integrations
+      security:
+        - ApiKeyBearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Revoked integration
+
+  /admin/integrations/{id}/rotate-secret:
+    post:
+      summary: Rotate integration secret
+      tags:
+        - Admin Integrations
+      security:
+        - ApiKeyBearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: New secret revealed once
+

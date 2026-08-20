@@ -260,6 +260,29 @@ export class RmsApiClient {
   }
 
   /**
+   * Check delivery availability and calculate fee for a target address
+   */
+  async checkDelivery(
+    branchId: string,
+    address: { zone_id?: string; city?: string; street?: string },
+    options?: RequestOptions
+  ): Promise<{ is_deliverable: boolean; zone?: DeliveryZone; delivery_fee: number }> {
+    const zones = await this.getDeliveryZones({ ...options, branchId });
+    if (address.zone_id) {
+      const match = zones.find((z) => z.id === address.zone_id && z.is_active);
+      if (match) {
+        return { is_deliverable: true, zone: match, delivery_fee: match.delivery_fee };
+      }
+    }
+    const defaultZone = zones.find((z) => z.is_active);
+    return {
+      is_deliverable: zones.length > 0,
+      zone: defaultZone,
+      delivery_fee: defaultZone ? defaultZone.delivery_fee : 0,
+    };
+  }
+
+  /**
    * List active promotions and coupons
    */
   async getOffers(): Promise<Offer[]> {

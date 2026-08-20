@@ -18,6 +18,9 @@ service cloud.firestore {
     match /api_clients/{clientId} {
       allow read, write: if false;
     }
+    match /integrations/{integrationId} {
+      allow read, write: if false;
+    }
 
     // Audit logs of API client key lifecycle actions
     match /api_client_audit_logs/{logId} {
