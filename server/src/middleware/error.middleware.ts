@@ -26,6 +26,14 @@ export function errorHandler(
     statusCode = 400;
     code = 'MALFORMED_JSON';
     message = 'Invalid JSON syntax in request body';
+  } else if (err.name === 'PayloadTooLargeError' || (err as any).type === 'entity.too.large') {
+    statusCode = 413;
+    code = 'PAYLOAD_TOO_LARGE';
+    message = 'Request payload exceeds maximum allowed size of 1MB';
+  } else if (err.message && err.message.includes('CORS Error')) {
+    statusCode = 403;
+    code = 'CORS_ORIGIN_DENIED';
+    message = err.message;
   }
 
   // Log error with context
@@ -39,8 +47,16 @@ export function errorHandler(
     details: env.NODE_ENV !== 'production' ? err.stack : undefined,
   });
 
-  // Never leak internal stack traces or secrets in production
-  const safeDetails = env.NODE_ENV === 'production' && statusCode === 500 ? undefined : details;
+  // Never leak internal stack traces or database errors in production
+  let safeMessage = message;
+  let safeDetails = details;
 
-  sendError(res, code, message, statusCode, safeDetails);
+  if (env.NODE_ENV === 'production') {
+    if (statusCode >= 500) {
+      safeMessage = 'An internal server error occurred';
+      safeDetails = undefined;
+    }
+  }
+
+  sendError(res, code, safeMessage, statusCode, safeDetails);
 }

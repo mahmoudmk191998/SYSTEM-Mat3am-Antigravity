@@ -20,8 +20,12 @@ const SENSITIVE_KEYS = [
   'authorization',
   'private_key',
   'secret',
+  'api_key',
+  'webhook_secret',
+  'cookie',
   'card_number',
   'cvv',
+  'credit_card',
 ];
 
 export function sanitize(data: any): any {

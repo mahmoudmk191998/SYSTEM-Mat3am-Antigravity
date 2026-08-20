@@ -6,6 +6,7 @@ export const API_PERMISSIONS = [
   'orders:create',
   'orders:read',
   'orders:update',
+  'orders:update_status',
   'webhooks:manage',
   'api_clients:manage',
   'customers:read',

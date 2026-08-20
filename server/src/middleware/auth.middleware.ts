@@ -39,6 +39,16 @@ export function createAuthMiddleware(clientService: ApiClientService = defaultAp
         rateLimitTier: client.rate_limit_tier,
       };
 
+      // Strict Origin Access Control:
+      const requestOrigin = req.header('Origin');
+      if (requestOrigin && client.allowed_origins && client.allowed_origins.length > 0) {
+        if (!client.allowed_origins.includes(requestOrigin)) {
+          throw new ForbiddenError(
+            `CORS Forbidden: Origin '${requestOrigin}' is not allowed for this API client`
+          );
+        }
+      }
+
       // Strict Tenant Isolation Guard:
       // Prevent requests from attempting to supply a different tenant_id in body, query, or headers
       if (req.body && req.body.tenant_id && req.body.tenant_id !== client.tenant_id) {

@@ -2,7 +2,8 @@ import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { getFirestoreDb } from '../config/firebase.js';
 import { env } from '../config/environment.js';
-import { NotFoundError, AppError } from '../utils/errors.js';
+import { NotFoundError, AppError, ValidationError } from '../utils/errors.js';
+import { validateSafeWebhookUrl } from '../utils/ssrf.js';
 import {
   CreateWebhookEndpointInput,
   CreateWebhookEndpointResult,
@@ -52,6 +53,11 @@ export class WebhookService {
     clientId: string,
     input: CreateWebhookEndpointInput
   ): Promise<CreateWebhookEndpointResult> {
+    const urlCheck = validateSafeWebhookUrl(input.url);
+    if (!urlCheck.isValid) {
+      throw new ValidationError(urlCheck.error || 'Invalid or dangerous webhook destination URL');
+    }
+
     const endpointId = `whe_${uuidv4().replace(/-/g, '').slice(0, 20)}`;
     const secret = `whsec_${crypto.randomBytes(24).toString('hex')}`;
     const secretHash = crypto.createHash('sha256').update(secret).digest('hex');

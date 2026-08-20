@@ -2,12 +2,181 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Basic rules: require auth for most things, but since some profiles are created during signup we allow write if auth != null
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
     }
-    
-    // Specifically allow anyone to read public config or tenant stuff if needed
-    // But for this MVP, logged-in users can read/write everything they need
+
+    // =========================================================================
+    // 1. SENSITIVE SERVER-ONLY COLLECTIONS
+    // Direct Browser / Mobile Client SDK access is STRICTLY FORBIDDEN.
+    // Only RMS Backend (Firebase Admin SDK) can access these collections.
+    // =========================================================================
+
+    // API Credentials, Hashes, and Secrets
+    match /api_clients/{clientId} {
+      allow read, write: if false;
+    }
+
+    // Audit logs of API client key lifecycle actions
+    match /api_client_audit_logs/{logId} {
+      allow read, write: if false;
+    }
+
+    // API Usage telemetry and event streams
+    match /api_usage_events/{eventId} {
+      allow read, write: if false;
+    }
+
+    // Webhook destination endpoints and secret hashes
+    match /webhook_endpoints/{endpointId} {
+      allow read, write: if false;
+    }
+
+    // Outgoing webhook delivery queues and payloads
+    match /webhook_events/{eventId} {
+      allow read, write: if false;
+    }
+
+    // Webhook delivery attempts and response metadata
+    match /webhook_delivery_attempts/{attemptId} {
+      allow read, write: if false;
+    }
+
+    // Atomic sequential order numbering counters
+    match /branch_counters/{counterId} {
+      allow read, write: if false;
+    }
+    match /orderCounters/{counterId} {
+      allow read, write: if false;
+    }
+
+    // SHA-256 request fingerprints and cached idempotent snapshots
+    match /idempotency_records/{recordId} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // 2. POS & AUTHENTICATED STAFF APPLICATION COLLECTIONS
+    // Authenticated users with valid session can interact according to POS workflows.
+    // =========================================================================
+
+    // Core Restaurant & Branch Configuration
+    match /tenants/{tenantId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /branches/{branchId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Menu Catalog, Items, Categories, Addons
+    match /menu_categories/{categoryId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /menu_items/{itemId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /products/{productId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /addons/{addonId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Orders, Line Items, and Status History
+    match /orders/{orderId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /order_items/{itemId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /order_status_history/{historyId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Transactions, Shifts, Financial Records
+    match /payments/{paymentId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /pos_shifts/{shiftId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /accounting_records/{recordId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /expenses/{expenseId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /call_center_orders/{orderId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Dining Tables & Reservations
+    match /tables/{tableId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /reservations/{resId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Inventory, Recipes & Procurement
+    match /inventory_items/{itemId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /units/{unitId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /suppliers/{supplierId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /purchase_orders/{orderId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /recipes/{recipeId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /recipe_ingredients/{ingredientId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /branch_stock/{stockId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /stock_movements/{movementId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Marketing, Discounts & Delivery Zones
+    match /delivery_zones/{zoneId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /promotions/{promoId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /coupons/{couponId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /offers/{offerId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // User Roles & Profiles
+    match /user_roles/{roleId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /user_permissions/{permId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /users/{userId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /customers/{customerId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Default catch-all: reject unauthenticated access to any unspecified document
+    match /{document=**} {
+      allow read, write: if isAuthenticated();
+    }
   }
 }
