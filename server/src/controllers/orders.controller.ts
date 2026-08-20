@@ -1,11 +1,9 @@
 import { Response, NextFunction } from 'express';
 import { defaultOrderService, OrderService } from '../services/order.service.js';
+import { defaultWebhookService } from '../services/webhook.service.js';
 import { AuthenticatedRequest } from '../types/api.types.js';
-import { PublicOrderResponse } from '../types/order.types.js';
 import { ForbiddenError, NotFoundError } from '../utils/errors.js';
 import { sendSuccess } from '../utils/response.js';
-import { NotFoundError } from '../utils/errors.js';
-import { defaultWebhookService } from '../services/webhook.service.js';
 
 export function createOrdersController(orderService: OrderService = defaultOrderService) {
   return {
@@ -26,7 +24,9 @@ export function createOrdersController(orderService: OrderService = defaultOrder
           idempotencyKey
         );
 
-        await defaultWebhookService.emit(tenantId, 'order.created', result as unknown as Record<string, unknown>);
+        defaultWebhookService
+          .triggerEvent(tenantId, 'order.created', result.order_id, result as any)
+          .catch(() => {});
 
         sendSuccess(res, result, 201);
       } catch (error) {
@@ -56,42 +56,34 @@ export function createOrdersController(orderService: OrderService = defaultOrder
           );
         }
 
-        // Format customer-safe public order response (stripping internal cost, margins, recipes, secrets)
-        const publicOrder: PublicOrderResponse = {
-          id: order.id,
-          order_number: order.order_number,
-          branch_id: order.branch_id,
-          order_type: order.order_type,
-          status: order.status,
-          payment_status: order.payment_status,
-          payment_method: order.payment_method,
-          customer: order.customer_snapshot,
-          delivery: order.delivery_snapshot,
-          pricing: {
-            subtotal: order.pricing_snapshot.subtotal,
-            discount_total: order.pricing_snapshot.discount_total,
-            delivery_fee: order.pricing_snapshot.delivery_fee,
-            tax_rate: order.pricing_snapshot.tax_rate,
-            tax_amount: order.pricing_snapshot.tax_amount,
-            grand_total: order.pricing_snapshot.grand_total,
-            currency: order.pricing_snapshot.currency,
-          },
-          items: order.items.map((item) => ({
-            product_id: item.product_id,
-            name: item.name,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            addons: item.addons,
-            addons_total: item.addons_total,
-            line_subtotal: item.line_subtotal,
-            line_total: item.line_total,
-          })),
-          notes: order.notes,
-          created_at: order.created_at,
-          updated_at: order.updated_at,
-        };
+        sendSuccess(res, orderService.toPublicOrder(order), 200);
+      } catch (error) {
+        next(error);
+      }
+    },
 
-        sendSuccess(res, publicOrder, 200);
+    updateStatus: async (
+      req: AuthenticatedRequest,
+      res: Response,
+      next: NextFunction
+    ): Promise<void> => {
+      try {
+        const tenantId = req.apiClient!.tenantId;
+        const orderId = req.params.id as string;
+        const allowedBranches = req.apiClient?.allowedBranchIds || [];
+
+        const updated = await orderService.transitionStatus(
+          tenantId,
+          orderId,
+          req.body.status,
+          allowedBranches
+        );
+
+        defaultWebhookService
+          .triggerEvent(tenantId, 'order.status_updated', orderId, updated as any)
+          .catch(() => {});
+
+        sendSuccess(res, orderService.toPublicOrder(updated), 200);
       } catch (error) {
         next(error);
       }
@@ -99,4 +91,4 @@ export function createOrdersController(orderService: OrderService = defaultOrder
   };
 }
 
-export const { createOrder, getOrderById } = createOrdersController();
+export const { createOrder, getOrderById, updateStatus } = createOrdersController();

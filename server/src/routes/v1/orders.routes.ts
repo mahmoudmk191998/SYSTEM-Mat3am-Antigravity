@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createOrder, getOrderById } from '../../controllers/orders.controller.js';
+import { createOrder, getOrderById, updateStatus } from '../../controllers/orders.controller.js';
 import { authenticateApiKey } from '../../middleware/auth.middleware.js';
 import { requireBranchAccess } from '../../middleware/branch.middleware.js';
 import { requirePermission } from '../../middleware/permission.middleware.js';
@@ -24,4 +24,13 @@ ordersRouter.get(
   authenticateApiKey,
   requirePermission('orders:read'),
   getOrderById
+);
+
+// PATCH /orders/:id/status
+ordersRouter.patch(
+  '/orders/:id/status',
+  authenticateApiKey,
+  requirePermission('orders:update_status'),
+  validateRequest({ body: updateOrderStatusSchema }),
+  updateStatus
 );

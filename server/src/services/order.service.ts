@@ -117,7 +117,7 @@ export class OrderService {
     if (this.useMemory) { memoryOrders.set(orderId, updated); return updated; }
     try { await getFirestoreDb().collection(ORDERS).doc(orderId).update({ status: target, updated_at: updated.updated_at }); return updated; } catch { throw new AppError('Order update failed', 503, 'PERSISTENCE_FAILED'); }
   }
-  toPublicOrder(order: StoredOrder) { return { order_id: order.id, order_number: order.order_number, branch_id: order.branch_id, order_type: order.order_type, status: order.status, payment_status: order.payment_status, payment_method: order.payment_method, items: order.items.map(({ product_id, name, quantity, unit_price, addons, addons_total, line_total }) => ({ product_id, name, quantity, unit_price, addons, addons_total, line_total })), pricing: this.resultFor(order).pricing, created_at: order.created_at, updated_at: order.updated_at }; }
+  toPublicOrder(order: StoredOrder) { return { id: order.id, order_id: order.id, order_number: order.order_number, branch_id: order.branch_id, order_type: order.order_type, status: order.status, payment_status: order.payment_status, payment_method: order.payment_method, customer: order.customer_snapshot ? { name: order.customer_snapshot.name || null } : undefined, items: order.items.map(({ product_id, name, quantity, unit_price, addons, addons_total, line_total }) => ({ product_id, name, quantity, unit_price, addons, addons_total, line_total })), pricing: this.resultFor(order).pricing, created_at: order.created_at, updated_at: order.updated_at }; }
   failNextPersistenceForTest() { this.failNextCommit = true; }
   clearMemory() { memoryOrders.clear(); memoryIdempotency.clear(); memoryCounters.clear(); this.failNextCommit = false; }
 }
