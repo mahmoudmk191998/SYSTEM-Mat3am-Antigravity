@@ -819,4 +819,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /orders/{id}:
+    get:
+      summary: Get a tenant- and branch-isolated order (PII excluded)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200: { description: Sanitized tracking data }
+        404: { description: Order not found or inaccessible }
+  /orders/{id}/status:
+    patch:
+      summary: Change order status through the server state machine
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [preparing, ready, completed, cancelled] }
+      responses:
+        200: { description: Status changed }
+        409: { description: Invalid status transition }
+  /webhooks/subscriptions:
+    post:
+      summary: Create an HMAC-signed order webhook subscription
+      responses:
+        201: { description: Subscription created; secret is returned once }
+    get:
+      summary: List subscriptions without secrets
+      responses:
+        200: { description: Subscriptions }
+  /webhooks/deliveries:
+    get:
+      summary: List delivery metadata and retry state
+      responses:
+        200: { description: Deliveries }
+
 

@@ -1,4 +1,4 @@
-# RMS Secure Server-Side Order Creation Documentation (Phase 3B)
+# RMS Secure Server-Side Order Creation Documentation (Phases 3B Hardening + 3C)
 
 ## 1. Overview & Lifecycle
 
@@ -117,6 +117,16 @@ Content-Type: application/json
   "notes": "يرجى رن الجرس بهدوء"
 }
 ```
+
+---
+
+## Phase 3B hardening and Phase 3C
+
+Order, line-items, branch counter, and idempotency response are committed in one Firestore transaction. The idempotency record is read inside that transaction, so concurrent retries return one result or `409 IDEMPOTENCY_KEY_REUSED`. Production never falls back to process memory: failures return `503 PERSISTENCE_FAILED`, so the same key can be safely retried.
+
+`GET /api/v1/orders/:id` is tenant/branch scoped and returns a sanitized tracking view without phone, address, client IDs, idempotency keys, or internal pricing data. Status changes require `orders:update` and follow: `pending → preparing|cancelled`, `preparing → ready|cancelled`, `ready → completed|cancelled`.
+
+Webhook subscriptions require `webhooks:manage` and support `order.created` and `order.status_changed`. Events have `evt_` IDs. Every delivery is deduplicated per event/subscription, signed as `X-RMS-Signature: sha256=<HMAC-SHA256(body)>`, carries `X-RMS-Event-ID`, records delivery status, and retries exponentially up to six times. The subscription secret is returned only once, at creation.
 
 ### Response (`201 Created`):
 ```json

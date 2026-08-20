@@ -689,4 +689,33 @@ describe('Phase 3B: RMS Secure Order Creation, Idempotency & Snapshots Suite', (
     expect((res.body.data as any).supplier_cost).toBeUndefined();
     expect((res.body.data as any).recipe).toBeUndefined();
   });
+
+  it('41. Concurrent retries with one idempotency key create exactly one order and counter value', async () => {
+    const payload = { branch_id: 'branch_sushi_main', order_type: 'dine_in', items: [{ product_id: 'prod_california', quantity: 1 }] };
+    const responses = await Promise.all(Array.from({ length: 12 }, () => request(app).post('/api/v1/orders').set('Authorization', tenantAToken).set('Idempotency-Key', 'concurrent-key').send(payload)));
+    expect(responses.every(r => r.status === 201)).toBe(true);
+    expect(new Set(responses.map(r => r.body.data.order_id)).size).toBe(1);
+    expect(new Set(responses.map(r => r.body.data.order_number)).size).toBe(1);
+  });
+
+  it('42. Failed persistence leaves no idempotency record or consumed order number', async () => {
+    defaultOrderService.failNextPersistenceForTest();
+    const payload = { branch_id: 'branch_sushi_main', order_type: 'dine_in', items: [{ product_id: 'prod_california', quantity: 1 }] };
+    const failed = await request(app).post('/api/v1/orders').set('Authorization', tenantAToken).set('Idempotency-Key', 'recovery-key').send(payload);
+    expect(failed.status).toBe(503);
+    const recovered = await request(app).post('/api/v1/orders').set('Authorization', tenantAToken).set('Idempotency-Key', 'recovery-key').send(payload);
+    expect(recovered.status).toBe(201);
+    expect(recovered.body.data.order_number).toBe('#1');
+  });
+
+  it('43-45. GET order hides PII, enforces tenant isolation, and state transitions are validated', async () => {
+    const created = await request(app).post('/api/v1/orders').set('Authorization', tenantAToken).send({ branch_id: 'branch_sushi_main', order_type: 'dine_in', items: [{ product_id: 'prod_california', quantity: 1 }], customer: { phone: '01000000000', address: 'private address' } });
+    const id = created.body.data.order_id;
+    const read = await request(app).get(`/api/v1/orders/${id}`).set('Authorization', tenantAToken);
+    expect(read.status).toBe(200); expect(read.body.data.customer_snapshot).toBeUndefined(); expect(JSON.stringify(read.body)).not.toContain('01000000000');
+    expect((await request(app).get(`/api/v1/orders/${id}`).set('Authorization', tenantBToken)).status).toBe(404);
+    expect((await request(app).patch(`/api/v1/orders/${id}/status`).set('Authorization', tenantAToken).send({ status: 'ready' })).status).toBe(403);
+    await expect(defaultOrderService.transitionStatus(TENANT_A, id, 'ready', [])).rejects.toMatchObject({ code: 'INVALID_ORDER_STATUS_TRANSITION' });
+    await expect(defaultOrderService.transitionStatus(TENANT_A, id, 'preparing', [])).resolves.toMatchObject({ status: 'preparing' });
+  });
 });

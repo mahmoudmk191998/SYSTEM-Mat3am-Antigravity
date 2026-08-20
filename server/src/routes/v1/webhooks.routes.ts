@@ -1,0 +1,10 @@
+import { Router } from 'express';
+import { authenticateApiKey } from '../../middleware/auth.middleware.js';
+import { requirePermission } from '../../middleware/permission.middleware.js';
+import { validateRequest } from '../../middleware/validator.middleware.js';
+import { createWebhookSubscription, listWebhookDeliveries, listWebhookSubscriptions } from '../../controllers/webhooks.controller.js';
+import { createWebhookSubscriptionSchema } from '../../validators/webhook.validator.js';
+export const webhooksRouter = Router();
+webhooksRouter.post('/webhooks/subscriptions', authenticateApiKey, requirePermission('webhooks:manage'), validateRequest({ body: createWebhookSubscriptionSchema }), createWebhookSubscription);
+webhooksRouter.get('/webhooks/subscriptions', authenticateApiKey, requirePermission('webhooks:manage'), listWebhookSubscriptions);
+webhooksRouter.get('/webhooks/deliveries', authenticateApiKey, requirePermission('webhooks:manage'), listWebhookDeliveries);
