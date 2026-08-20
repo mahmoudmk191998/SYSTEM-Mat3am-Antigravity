@@ -27,4 +27,5 @@ Welcome to the **Universal RMS Developer Portal**. This platform provides secure
 - [API Versioning Strategy](versioning.md)
 - [Interactive Developer Playground](playground.md)
 - [Official TypeScript SDK (@rms/sdk)](sdk.md)
+- [SDK Publishing & Release Pipeline](sdk-publishing.md)
 - [Troubleshooting & FAQs](troubleshooting.md)

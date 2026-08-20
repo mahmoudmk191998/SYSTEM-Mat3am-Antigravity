@@ -137,8 +137,8 @@ export class RmsApiClient {
   }
 
   // System & Branding APIs
-  async getHealth(): Promise<HealthResponse> {
-    return this.request<HealthResponse>('/health', 'GET');
+  async getHealth(options?: RequestOptions): Promise<HealthResponse> {
+    return this.request<HealthResponse>('/health', 'GET', undefined, options);
   }
 
   async getSettings(options?: RequestOptions): Promise<RestaurantSettings> {
@@ -148,6 +148,10 @@ export class RmsApiClient {
   // Catalog & Menu APIs
   async getBranches(options?: RequestOptions): Promise<Branch[]> {
     return this.request<Branch[]>('/branches', 'GET', undefined, options);
+  }
+
+  async getBranchById(branchId: string, options?: RequestOptions): Promise<Branch> {
+    return this.request<Branch>(`/branches/${branchId}`, 'GET', undefined, options);
   }
 
   async getCategories(options?: RequestOptions): Promise<Category[]> {
