@@ -34,9 +34,23 @@ export function createCorsMiddleware() {
       return callback(null, true);
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Branch-ID', 'Idempotency-Key'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Request-ID',
+      'X-Branch-ID',
+      'X-Tenant-ID',
+      'Idempotency-Key',
+      'content-type',
+      'authorization',
+      'x-request-id',
+      'x-branch-id',
+      'x-tenant-id',
+      'idempotency-key',
+    ],
     exposedHeaders: ['X-Request-ID', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset', 'Retry-After'],
     credentials: true,
     maxAge: 86400, // 24 hours
+    optionsSuccessStatus: 204,
   });
 }

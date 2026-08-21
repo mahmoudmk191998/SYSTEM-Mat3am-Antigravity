@@ -128,7 +128,7 @@ describe('Phase 5: Production Security Hardening & Audit Test Suite', () => {
     expect(res.body.error.code).toBe('FORBIDDEN');
   });
 
-  // ==================== 9-10. CORS Hardening ====================
+  // ==================== 9-10. CORS Hardening & Preflight ====================
 
   it('9. Malicious Origin is rejected or denied CORS headers', async () => {
     const res = await request(app)
@@ -139,7 +139,7 @@ describe('Phase 5: Production Security Hardening & Audit Test Suite', () => {
     expect(res.status).toBe(403);
   });
 
-  it('10. Client configured allowed_origins is respected and unauthorized origin is rejected', async () => {
+  it('10a. Client configured allowed_origins is respected and unauthorized origin is rejected', async () => {
     const allowedRes = await request(app)
       .get('/api/v1/menu')
       .set('Origin', 'https://sushibar.com')
@@ -153,6 +153,32 @@ describe('Phase 5: Production Security Hardening & Audit Test Suite', () => {
       .set('Authorization', tenantAToken);
 
     expect(unauthorizedRes.status).toBe(403);
+  });
+
+  it('10b. OPTIONS preflight from https://mksystem-rose.vercel.app allows X-Tenant-ID and credentials', async () => {
+    const preflightRes = await request(app)
+      .options('/api/v1/admin/api-clients')
+      .set('Origin', 'https://mksystem-rose.vercel.app')
+      .set('Access-Control-Request-Method', 'POST')
+      .set('Access-Control-Request-Headers', 'authorization, content-type, x-tenant-id');
+
+    expect(preflightRes.status).toBe(204);
+    expect(preflightRes.headers['access-control-allow-origin']).toBe('https://mksystem-rose.vercel.app');
+    expect(preflightRes.headers['access-control-allow-credentials']).toBe('true');
+    expect(preflightRes.headers['access-control-allow-headers'].toLowerCase()).toContain('x-tenant-id');
+  });
+
+  it('10c. OPTIONS preflight from https://sushi-bar.pages.dev allows X-Tenant-ID and credentials', async () => {
+    const preflightRes = await request(app)
+      .options('/api/v1/admin/api-clients')
+      .set('Origin', 'https://sushi-bar.pages.dev')
+      .set('Access-Control-Request-Method', 'GET')
+      .set('Access-Control-Request-Headers', 'authorization, content-type, x-tenant-id');
+
+    expect(preflightRes.status).toBe(204);
+    expect(preflightRes.headers['access-control-allow-origin']).toBe('https://sushi-bar.pages.dev');
+    expect(preflightRes.headers['access-control-allow-credentials']).toBe('true');
+    expect(preflightRes.headers['access-control-allow-headers'].toLowerCase()).toContain('x-tenant-id');
   });
 
   // ==================== 11. Request Payload Limits ====================

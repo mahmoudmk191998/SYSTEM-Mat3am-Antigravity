@@ -37,7 +37,7 @@ const envSchema = z.object({
   WEBHOOK_CIRCUIT_HALF_OPEN_REQUESTS: z.coerce.number().default(1),
 
   // CORS configuration
-  ALLOWED_ORIGINS: z.string().default('http://localhost:3000,http://localhost:5173,http://localhost:4000'),
+  ALLOWED_ORIGINS: z.string().default('http://localhost:3000,http://localhost:5173,http://localhost:4000,https://mksystem-rose.vercel.app,https://sushi-bar.pages.dev'),
   
   // Firebase Admin Credentials
   FIREBASE_PROJECT_ID: z.string().optional(),
