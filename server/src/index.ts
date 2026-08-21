@@ -1,3 +1,5 @@
+import http from 'http';
+import { WebSocketServer } from 'ws';
 import express from 'express';
 import helmet from 'helmet';
 import { env } from './config/environment.js';
@@ -13,6 +15,10 @@ import { v2Router } from './routes/v2/index.js';
 import { NotFoundError } from './utils/errors.js';
 import { logger } from './utils/logger.js';
 import { defaultWebhookService } from './services/webhook.service.js';
+import { setupWebsocketServer } from './realtime/websocket/websocket.routes.js';
+import { defaultWebsocketManager } from './realtime/websocket/websocketManager.js';
+import { defaultSseManager } from './realtime/sse/sseManager.js';
+import { defaultWebhookWorker } from './infrastructure/webhooks/webhookWorker.js';
 
 export function createApp(): express.Application {
   const app = express();
@@ -65,12 +71,34 @@ export const app = createApp();
 if (process.env.NODE_ENV !== 'test') {
   initFirebaseAdmin();
 
-  // Durable webhook outbox worker. Failed deliveries retain their retry schedule.
-  setInterval(() => {
-    defaultWebhookService.dispatchDue().catch((error) => logger.error('Webhook delivery sweep failed', { details: error instanceof Error ? error.message : error }));
-  }, 60_000).unref();
+  // 1. Start Webhook Worker if enabled
+  if (env.WEBHOOK_WORKER_ENABLED) {
+    defaultWebhookWorker.start(env.WEBHOOK_POLL_INTERVAL_MS);
+    logger.info('⚙️ Distributed Webhook Worker started', {
+      details: {
+        concurrency: env.WEBHOOK_WORKER_CONCURRENCY,
+        pollIntervalMs: env.WEBHOOK_POLL_INTERVAL_MS,
+      },
+    });
+  }
 
-  app.listen(env.PORT, () => {
+  // 2. Durable webhook outbox worker sweep timer
+  const sweepInterval = setInterval(() => {
+    defaultWebhookService.dispatchDue().catch((error) =>
+      logger.error('Webhook delivery sweep failed', {
+        details: error instanceof Error ? error.message : error,
+      })
+    );
+  }, 60_000);
+  sweepInterval.unref();
+
+  // 3. Create HTTP Server and bind WebSocket server
+  const server = http.createServer(app);
+  const wss = new WebSocketServer({ server, path: '/api/v1/realtime/ws' });
+  setupWebsocketServer(wss, defaultWebsocketManager);
+
+  // 4. Start HTTP Server
+  server.listen(env.PORT, () => {
     logger.info(`🚀 RMS REST API Server is running`, {
       endpoint: `http://localhost:${env.PORT}/api/v1/health`,
       details: {
@@ -78,7 +106,61 @@ if (process.env.NODE_ENV !== 'test') {
         environment: env.NODE_ENV,
         rateLimit: env.API_RATE_LIMIT,
         rateWindowMs: env.API_RATE_WINDOW_MS,
+        wsEndpoint: `ws://localhost:${env.PORT}/api/v1/realtime/ws`,
       },
     });
   });
+
+  // 5. Graceful Shutdown Handlers (SIGTERM, SIGINT)
+  let isShuttingDown = false;
+
+  const gracefulShutdown = async (signal: string) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    logger.info(`Received ${signal}. Initiating graceful shutdown...`);
+
+    // Force exit timeout after 10s if connections refuse to terminate
+    const forceExitTimer = setTimeout(() => {
+      logger.error('Forced shutdown timeout reached. Exiting immediately.');
+      process.exit(1);
+    }, 10_000);
+    forceExitTimer.unref();
+
+    try {
+      // Step A: Stop background timers and workers
+      clearInterval(sweepInterval);
+      defaultWebhookWorker.stop();
+      logger.info('Stopped background webhook workers');
+
+      // Step B: Gracefully close WebSockets and SSE streams
+      defaultWebsocketManager.closeAll();
+      wss.close();
+      defaultSseManager.closeAll();
+      logger.info('Closed active WebSocket and SSE client connections');
+
+      // Step C: Stop accepting new HTTP connections and finish in-flight requests
+      await new Promise<void>((resolve) => {
+        server.close((err) => {
+          if (err) {
+            logger.error('Error closing HTTP server', { details: err.message });
+          } else {
+            logger.info('HTTP server closed cleanly');
+          }
+          resolve();
+        });
+      });
+
+      logger.info('✅ Graceful shutdown completed cleanly');
+      process.exit(0);
+    } catch (err) {
+      logger.error('Error during graceful shutdown', {
+        details: err instanceof Error ? err.message : err,
+      });
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
+
