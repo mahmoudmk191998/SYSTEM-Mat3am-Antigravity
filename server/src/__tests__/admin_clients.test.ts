@@ -423,4 +423,62 @@ describe('Phase 4A: API Client & Credential Management Test Suite', () => {
     expect(res.body.success).toBe(false);
     expect(res.body.error.code).toBe('FORBIDDEN');
   });
+
+  // Test 34-36: Dual authentication supports Admin Dashboard session and created credential authenticates on menu
+  it('34-36. Admin Dashboard session token creates API client whose secret authenticates on menu endpoint', async () => {
+    const adminSessionToken = 'Bearer mock_admin_token_admin_user_123';
+
+    // 1. Admin creates client via Dashboard session
+    const createRes = await request(app)
+      .post('/api/v1/admin/api-clients')
+      .set('Authorization', adminSessionToken)
+      .set('X-Tenant-ID', TENANT_A)
+      .send({
+        name: 'Sushi Storefront Live',
+        permissions: ['menu:read', 'orders:create'],
+        allowed_origins: ['https://sushi-bar.pages.dev'],
+      });
+
+    expect(createRes.status).toBe(201);
+    expect(createRes.body.data.client_id).toBeDefined();
+    expect(createRes.body.data.credential_header).toBeDefined();
+    expect(createRes.body.data.client_secret).toBeDefined();
+
+    const createdClientId = createRes.body.data.client_id;
+    const clientBearerToken = `Bearer ${createRes.body.data.credential_header}`;
+
+    // 2. Newly created client authenticates against /api/v1/menu
+    const menuRes = await request(app)
+      .get('/api/v1/menu')
+      .set('Authorization', clientBearerToken)
+      .set('Origin', 'https://sushi-bar.pages.dev');
+
+    expect(menuRes.status).toBe(200);
+    expect(menuRes.body.success).toBe(true);
+
+    // 3. Admin rotates secret for client
+    const rotateRes = await request(app)
+      .post(`/api/v1/admin/api-clients/${createdClientId}/rotate-secret`)
+      .set('Authorization', adminSessionToken)
+      .set('X-Tenant-ID', TENANT_A);
+
+    expect(rotateRes.status).toBe(200);
+    const newCredentialHeader = rotateRes.body.data.credential_header;
+
+    // 4. Old credential immediately fails
+    const oldAuthRes = await request(app)
+      .get('/api/v1/menu')
+      .set('Authorization', clientBearerToken)
+      .set('Origin', 'https://sushi-bar.pages.dev');
+
+    expect(oldAuthRes.status).toBe(401);
+
+    // 5. New credential authenticates successfully
+    const newAuthRes = await request(app)
+      .get('/api/v1/menu')
+      .set('Authorization', `Bearer ${newCredentialHeader}`)
+      .set('Origin', 'https://sushi-bar.pages.dev');
+
+    expect(newAuthRes.status).toBe(200);
+  });
 });

@@ -65,3 +65,11 @@ export const getFirestoreDb = (): admin.firestore.Firestore => {
   }
   return firestoreInstance;
 };
+
+export const getFirebaseAuth = (): admin.auth.Auth => {
+  if (!authInstance) {
+    const { auth } = initFirebaseAdmin();
+    authInstance = auth;
+  }
+  return authInstance;
+};
