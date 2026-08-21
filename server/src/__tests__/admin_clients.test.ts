@@ -480,5 +480,19 @@ describe('Phase 4A: API Client & Credential Management Test Suite', () => {
       .set('Origin', 'https://sushi-bar.pages.dev');
 
     expect(newAuthRes.status).toBe(200);
+
+    // 6. Admin GET list immediately returns the newly created client
+    const listRes = await request(app)
+      .get('/api/v1/admin/api-clients')
+      .set('Authorization', adminSessionToken)
+      .set('X-Tenant-ID', TENANT_A);
+
+    expect(listRes.status).toBe(200);
+    expect(listRes.body.success).toBe(true);
+    const found = listRes.body.data.find((c: any) => c.client_id === createdClientId);
+    expect(found).toBeDefined();
+    expect(found.name).toBe('Sushi Storefront Live');
+    expect(found.status).toBe('active');
+    expect(found.client_secret_hash).toBeUndefined();
   });
 });

@@ -21,6 +21,7 @@ import {
   verifySecret,
 } from '../utils/crypto.js';
 import { AppError, NotFoundError, UnauthorizedError, ValidationError } from '../utils/errors.js';
+import { logger } from '../utils/logger.js';
 import { defaultBranchesService, BranchesService } from './branches.service.js';
 
 const COLLECTION_NAME = 'api_clients';
@@ -180,14 +181,18 @@ export class ApiClientService {
       created_by: input.created_by || actorId,
     };
 
-    if (this.useMemory) {
-      inMemoryClients.set(clientId, clientData);
-    } else {
+    // Always maintain local memory cache in sync with Firestore
+    inMemoryClients.set(clientId, clientData);
+
+    if (!this.useMemory) {
       try {
         const db = getFirestoreDb();
         await db.collection(COLLECTION_NAME).doc(clientId).set(clientData);
       } catch (err) {
-        inMemoryClients.set(clientId, clientData);
+        logger.error('Failed to persist API client to Firestore, kept in memory fallback', {
+          details: err,
+          client_id: clientId,
+        });
       }
     }
 
@@ -224,11 +229,26 @@ export class ApiClientService {
           .collection(COLLECTION_NAME)
           .where('tenant_id', '==', tenantId)
           .get();
-        clients = snapshot.docs.map((doc) => doc.data() as ApiClient);
-      } catch (_) {
+        if (!snapshot.empty) {
+          clients = snapshot.docs.map((doc) => doc.data() as ApiClient);
+          for (const c of clients) {
+            inMemoryClients.set(c.client_id, c);
+          }
+        } else {
+          // Check memory cache fallback
+          const memClients = Array.from(inMemoryClients.values()).filter((c) => c.tenant_id === tenantId);
+          if (memClients.length > 0) {
+            clients = memClients;
+          }
+        }
+      } catch (err) {
+        logger.warn('Failed to query Firestore api_clients, falling back to memory', { details: err, tenant_id: tenantId });
         clients = Array.from(inMemoryClients.values()).filter((c) => c.tenant_id === tenantId);
       }
     }
+
+    // Sort newest first
+    clients.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     return clients.map(({ client_secret_hash, ...safeClient }) => safeClient);
   }

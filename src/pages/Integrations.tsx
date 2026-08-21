@@ -142,10 +142,16 @@ export default function Integrations() {
         rate_limit_tier: 'standard',
       }, tenantId);
 
+      // Open one-time secret modal with exact backend credentials
       setGeneratedSecretData({
         clientId: result.client_id,
         secret: result.credential_header,
       });
+
+      // Optimistically update local state immediately so client appears in UI
+      if (result.client) {
+        setApiClients(prev => [result.client, ...prev.filter(c => c.client_id !== result.client.client_id)]);
+      }
 
       setIsCreateModalOpen(false);
       setNewClientName('');
@@ -172,6 +178,8 @@ export default function Integrations() {
         clientId: result.client_id,
         secret: result.credential_header,
       });
+      // Optimistically update secret_last4 and updated_at
+      setApiClients(prev => prev.map(c => c.client_id === clientId ? { ...c, secret_last4: result.client_secret.slice(-4), updated_at: result.rotated_at } : c));
       toast({ title: 'تم تدوير المفتاح', description: 'تم إبطال المفتاح القديم وتوليد مفتاح سري جديد' });
       await loadApiClients();
     } catch (err: any) {
@@ -189,10 +197,12 @@ export default function Integrations() {
     setActionLoadingId(client.client_id);
     try {
       if (client.status === 'active') {
-        await apiClientsService.disableClient(client.client_id, tenantId);
+        const updated = await apiClientsService.disableClient(client.client_id, tenantId);
+        setApiClients(prev => prev.map(c => c.client_id === client.client_id ? (updated || { ...c, status: 'disabled' }) : c));
         toast({ title: 'تم التعطيل', description: `تم تعطيل المفتاح ${client.client_id}` });
       } else {
-        await apiClientsService.enableClient(client.client_id, tenantId);
+        const updated = await apiClientsService.enableClient(client.client_id, tenantId);
+        setApiClients(prev => prev.map(c => c.client_id === client.client_id ? (updated || { ...c, status: 'active' }) : c));
         toast({ title: 'تم التفعيل', description: `تم تفعيل المفتاح ${client.client_id}` });
       }
       await loadApiClients();
@@ -210,7 +220,8 @@ export default function Integrations() {
   const handleRevokeClient = async (clientId: string) => {
     setActionLoadingId(clientId);
     try {
-      await apiClientsService.revokeClient(clientId, tenantId);
+      const updated = await apiClientsService.revokeClient(clientId, tenantId);
+      setApiClients(prev => prev.map(c => c.client_id === clientId ? (updated || { ...c, status: 'revoked' }) : c));
       toast({ title: 'تم إلغاء المفتاح', description: `تم إلغاء المفتاح ${clientId} نهائياً` });
       await loadApiClients();
     } catch (err: any) {
@@ -322,16 +333,16 @@ export default function Integrations() {
                           {client.description && (
                             <p className="text-xs text-muted-foreground">{client.description}</p>
                           )}
-                          <div className="flex flex-wrap items-center gap-3 pt-2 text-xs font-mono text-muted-foreground">
-                            <span className="bg-muted px-2 py-1 rounded">Client ID: {client.client_id}</span>
-                            <span className="bg-muted px-2 py-1 rounded">Secret: ••••••••••••••••{client.secret_last4}</span>
+                          <div className="flex flex-wrap items-center gap-3 pt-2 text-xs text-muted-foreground">
+                            <span dir="ltr" className="bg-muted px-2 py-1 rounded font-mono select-all">Client ID: {client.client_id}</span>
+                            <span dir="ltr" className="bg-muted px-2 py-1 rounded font-mono">Secret: ••••••••••••••••{client.secret_last4}</span>
                             {client.allowed_origins && client.allowed_origins.length > 0 && (
-                              <span className="bg-muted/80 px-2 py-1 rounded flex items-center gap-1 font-sans">
+                              <span dir="ltr" className="bg-muted/80 px-2 py-1 rounded flex items-center gap-1 font-mono">
                                 <Globe className="w-3 h-3" />
                                 {client.allowed_origins.join(', ')}
                               </span>
                             )}
-                            <span>أنشئ: {new Date(client.created_at).toLocaleDateString('ar-EG')}</span>
+                            <span className="font-sans">أنشئ: {new Date(client.created_at).toLocaleDateString('ar-EG')}</span>
                           </div>
                         </div>
 
@@ -524,49 +535,61 @@ export default function Integrations() {
 
       {/* Modal 2: One-Time Secret Reveal Modal */}
       <Dialog open={!!generatedSecretData} onOpenChange={(open) => !open && setGeneratedSecretData(null)}>
-        <DialogContent className="sm:max-w-[550px]">
+        <DialogContent className="sm:max-w-[620px] max-w-[95vw]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-warning">
-              <AlertTriangle className="w-5 h-5" />
+            <DialogTitle className="flex items-center gap-2 text-warning text-lg">
+              <AlertTriangle className="w-5 h-5 text-warning" />
               احفظ المفتاح السري الآن!
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-sm">
               لن تتمكن من رؤية هذا المفتاح السري مرة أخرى بعد إغلاق هذه النافذة لأسباب أمنية مشددة. يتم حفظ بصمة تشفيرية فقط على الخادم.
             </DialogDescription>
           </DialogHeader>
           {generatedSecretData && (
             <div className="space-y-4 py-3">
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Client ID (معرف العميل)</Label>
-                <div className="flex items-center gap-2">
-                  <Input readOnly value={generatedSecretData.clientId} className="font-mono text-sm bg-muted" />
-                  <Button size="icon" variant="outline" onClick={() => copyToClipboard(generatedSecretData.clientId, 'تم نسخ Client ID')}>
+              {/* Client ID */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground font-medium">Client ID (معرف العميل)</Label>
+                <div className="flex items-center gap-2" dir="ltr">
+                  <div className="flex-1 min-w-0 bg-muted border rounded-lg px-3 py-2 font-mono text-xs text-left overflow-x-auto select-all whitespace-nowrap">
+                    {generatedSecretData.clientId}
+                  </div>
+                  <Button size="icon" variant="outline" className="flex-shrink-0" onClick={() => copyToClipboard(generatedSecretData.clientId, 'تم نسخ Client ID')}>
                     <Copy className="w-4 h-4" />
                   </Button>
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">رمز الاعتماد الجاهز (Bearer Token / API Key)</Label>
-                <div className="flex items-center gap-2">
-                  <Input readOnly value={generatedSecretData.secret} className="font-mono text-xs bg-muted text-primary font-bold" />
-                  <Button size="icon" variant="outline" onClick={() => copyToClipboard(generatedSecretData.secret, 'تم نسخ رمز الاعتماد الكامل')}>
+              {/* Complete Ready-to-Use Bearer Token */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground font-medium">رمز الاعتماد الكامل (Bearer Token / API Key)</Label>
+                <div className="flex items-center gap-2" dir="ltr">
+                  <div className="flex-1 min-w-0 bg-muted/90 border border-primary/30 rounded-lg px-3 py-2.5 font-mono text-xs text-primary font-bold text-left overflow-x-auto select-all whitespace-nowrap">
+                    {generatedSecretData.secret}
+                  </div>
+                  <Button size="icon" variant="outline" className="flex-shrink-0 border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground" onClick={() => copyToClipboard(generatedSecretData.secret, 'تم نسخ رمز الاعتماد الكامل')}>
                     <Copy className="w-4 h-4" />
                   </Button>
                 </div>
               </div>
 
-              <div className="p-3 bg-warning/10 border border-warning/20 rounded-lg text-xs text-warning leading-relaxed space-y-1">
-                <p className="font-bold">طريقة الاستخدام:</p>
-                <p className="font-mono text-[11px] bg-background/50 p-1.5 rounded">
-                  Authorization: Bearer {generatedSecretData.secret}
+              {/* Usage Guide */}
+              <div className="p-3.5 bg-warning/10 border border-warning/30 rounded-xl text-xs space-y-2 text-warning-foreground">
+                <p className="font-bold flex items-center gap-1.5 text-warning">
+                  <Shield className="w-4 h-4" />
+                  طريقة الاستخدام في موقعك أو تطبيقك:
                 </p>
-                <p>قم بنسخ هذا الرمز وضعه في متغيرات البيئة (ENV) لموقعك الخارجي (مثل Cloudflare Pages أو Vercel).</p>
+                <div dir="ltr" className="bg-background/80 border border-warning/20 rounded-lg p-2.5 font-mono text-[11px] text-left overflow-x-auto whitespace-nowrap">
+                  Authorization: Bearer {generatedSecretData.secret}
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  قم بنسخ هذا الرمز كاملاً وضعه في متغيرات البيئة (مثل <code className="font-mono text-[11px] bg-muted px-1 py-0.5 rounded">RMS_API_KEY</code>) لموقعك الخارجي (مثل Cloudflare Pages أو Vercel).
+                </p>
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button onClick={() => setGeneratedSecretData(null)}>تم حفظ المفتاح بأمان</Button>
+            <Button className="w-full sm:w-auto" onClick={() => setGeneratedSecretData(null)}>تم نسخ وحفظ المفتاح بأمان</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
