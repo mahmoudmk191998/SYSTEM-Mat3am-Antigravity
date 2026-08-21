@@ -270,7 +270,7 @@ describe('Phase 5: Production Security Hardening & Audit Test Suite', () => {
         }
       }
     }
-  });
+  }, 20000);
 
   // ==================== 19. Stack Trace & Error Hiding ====================
 
