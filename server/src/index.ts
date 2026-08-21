@@ -97,16 +97,17 @@ if (process.env.NODE_ENV !== 'test') {
   const wss = new WebSocketServer({ server, path: '/api/v1/realtime/ws' });
   setupWebsocketServer(wss, defaultWebsocketManager);
 
-  // 4. Start HTTP Server
-  server.listen(env.PORT, () => {
+  // 4. Start HTTP Server bound to 0.0.0.0
+  server.listen(env.PORT, '0.0.0.0', () => {
     logger.info(`🚀 RMS REST API Server is running`, {
-      endpoint: `http://localhost:${env.PORT}/api/v1/health`,
+      endpoint: `http://0.0.0.0:${env.PORT}/api/v1/health`,
       details: {
         port: env.PORT,
+        host: '0.0.0.0',
         environment: env.NODE_ENV,
         rateLimit: env.API_RATE_LIMIT,
         rateWindowMs: env.API_RATE_WINDOW_MS,
-        wsEndpoint: `ws://localhost:${env.PORT}/api/v1/realtime/ws`,
+        wsEndpoint: `ws://0.0.0.0:${env.PORT}/api/v1/realtime/ws`,
       },
     });
   });
