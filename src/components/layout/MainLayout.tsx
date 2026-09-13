@@ -7,8 +7,9 @@ import { useTheme } from '@/hooks/useTheme';
 import { useProfile } from '@/hooks/useProfile';
 import { Sidebar, SidebarContent } from './Sidebar';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
-import { User, Wifi, WifiOff, LogOut, Moon, Sun, Lock, Clock, CalendarDays, Download, Menu } from 'lucide-react';
+import { User, Wifi, WifiOff, LogOut, Moon, Sun, Lock, Clock, CalendarDays, Download, Menu, Eye, EyeOff } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatDate } from '@/lib/formatters';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
@@ -84,7 +85,7 @@ function LiveClock() {
 }
 
 export function MainLayout({ children, title, subtitle, actions }: MainLayoutProps) {
-  const { sidebarCollapsed, settings } = useAppStore();
+  const { sidebarCollapsed, settings, bottomNavVisible, toggleBottomNav } = useAppStore();
   const isMobile = useIsMobile();
   const isOnline = navigator.onLine;
   const { signOut, user } = useAuth();
@@ -132,7 +133,10 @@ export function MainLayout({ children, title, subtitle, actions }: MainLayoutPro
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }}
-        className={cn("min-h-screen pb-28 pt-4 px-2 md:px-6 w-full max-w-[1800px] mx-auto relative")}
+        className={cn(
+          "min-h-screen pt-4 px-2 md:px-6 w-full max-w-[1800px] mx-auto relative transition-all duration-300",
+          bottomNavVisible ? "pb-28" : "pb-10"
+        )}
       >
         {/* Top Header */}
         <header className={cn(
@@ -223,6 +227,28 @@ export function MainLayout({ children, title, subtitle, actions }: MainLayoutPro
                 {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-500 animate-in spin-in-12" /> : <Moon className="w-4 h-4 text-indigo-500 animate-in spin-in-12" />}
               </Button>
 
+              {/* Bottom Nav Toggle */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="hidden md:flex h-10 w-10 rounded-full border-border/50 shadow-sm hover:shadow-md hover:border-primary/30 transition-all duration-300 bg-background/50 backdrop-blur-sm"
+                    onClick={toggleBottomNav}
+                    aria-label="تبديل إظهار شريط القوائم"
+                  >
+                    {bottomNavVisible ? (
+                      <EyeOff className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors" />
+                    ) : (
+                      <Eye className="w-4 h-4 text-primary animate-pulse" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="font-cairo text-xs font-bold">
+                  {bottomNavVisible ? 'إخفاء شريط القوائم السفلي (Ctrl+B)' : 'إظهار شريط القوائم السفلي (Ctrl+B)'}
+                </TooltipContent>
+              </Tooltip>
+
               {/* User Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -250,6 +276,22 @@ export function MainLayout({ children, title, subtitle, actions }: MainLayoutPro
                     <DropdownMenuItem className="rounded-xl px-3 py-2.5 cursor-pointer text-[13px] font-medium transition-colors hover:bg-primary/5 hover:text-primary">
                       <User className="w-4 h-4 ml-2 opacity-70" />
                       إعدادات الحساب
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="rounded-xl px-3 py-2.5 cursor-pointer text-[13px] font-medium transition-colors hover:bg-primary/5 hover:text-primary"
+                      onClick={toggleBottomNav}
+                    >
+                      {bottomNavVisible ? (
+                        <>
+                          <EyeOff className="w-4 h-4 ml-2 opacity-70" />
+                          إخفاء شريط القوائم (Ctrl+B)
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-4 h-4 ml-2 opacity-70" />
+                          إظهار شريط القوائم (Ctrl+B)
+                        </>
+                      )}
                     </DropdownMenuItem>
                     <DropdownMenuItem className="rounded-xl px-3 py-2.5 cursor-pointer text-[13px] font-medium text-red-500 transition-colors hover:bg-red-500/10 hover:text-red-600 focus:bg-red-500/10 focus:text-red-600 mt-1" onClick={handleSignOut}>
                       <LogOut className="w-4 h-4 ml-2 opacity-70" />

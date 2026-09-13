@@ -155,6 +155,11 @@ interface AppState {
   // Sidebar state
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
+
+  // Bottom Navigation state
+  bottomNavVisible: boolean;
+  setBottomNavVisible: (visible: boolean) => void;
+  toggleBottomNav: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -259,12 +264,17 @@ export const useAppStore = create<AppState>()(
       clearCart: () => set({ cart: [] }),
 
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+
+      bottomNavVisible: true,
+      setBottomNavVisible: (visible) => set({ bottomNavVisible: visible }),
+      toggleBottomNav: () => set((state) => ({ bottomNavVisible: !state.bottomNavVisible })),
     }),
     {
       name: 'rms-storage',
       partialize: (state) => ({
         settings: state.settings,
         sidebarCollapsed: state.sidebarCollapsed,
+        bottomNavVisible: state.bottomNavVisible,
       }),
     }
   )
