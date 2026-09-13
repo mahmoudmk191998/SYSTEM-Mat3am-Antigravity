@@ -7,7 +7,8 @@ import {
   Briefcase, DollarSign, Timer, Edit, Trash2, Eye, Shield,
   QrCode, Printer, Download, Copy, RefreshCw, KeyRound, MapPin,
   AlertTriangle, Sliders, FileText, CheckCircle2, XCircle, ArrowUpDown,
-  Lock, Phone, ChevronRight, UserMinus, UserCheck, Calculator
+  Lock, Phone, ChevronRight, UserMinus, UserCheck, Calculator,
+  ChevronDown, FileDown, Image as ImageIcon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +17,13 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
@@ -62,6 +70,7 @@ export default function HR() {
     updateEmployee,
     changeEmployeePin,
     deleteEmployee,
+    deleteAttendance,
     manualCorrectAttendance,
     addShift,
     updateShift,
@@ -130,6 +139,10 @@ export default function HR() {
     status: 'present',
     reason: '',
   });
+
+  // Delete Attendance Record Modal State
+  const [deleteAttendanceRecord, setDeleteAttendanceRecord] = useState<any>(null);
+  const [isDeletingAttendance, setIsDeletingAttendance] = useState(false);
 
   // Reports & Payroll Filter
   const [reportDateFrom, setReportDateFrom] = useState(() => {
@@ -224,11 +237,22 @@ export default function HR() {
     });
   }, [attendance, attDateFilter, attStatusFilter, attSearchQuery]);
 
-  // Public QR attendance URL
+  // Public QR attendance URL (Ensures real production domain is used even during local development)
   const attendanceUrl = useMemo(() => {
-    const origin = window.location.origin;
-    return `${origin}/attendance?token=${encodeURIComponent(hrSettings.attendance_token || '')}`;
-  }, [hrSettings.attendance_token]);
+    let baseUrl = window.location.origin;
+    const isLocalhost =
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === '0.0.0.0';
+
+    if (isLocalhost) {
+      baseUrl =
+        (import.meta as any).env?.VITE_PUBLIC_APP_URL ||
+        (hrSettings as any)?.public_app_url ||
+        'https://mksystem-rose.vercel.app';
+    }
+    return `${baseUrl}/attendance?token=${encodeURIComponent(hrSettings.attendance_token || '')}`;
+  }, [hrSettings.attendance_token, (hrSettings as any)?.public_app_url]);
 
   // Handle Add Employee
   const handleSaveEmployee = async () => {
@@ -396,47 +420,147 @@ export default function HR() {
     toast.success('تم نسخ رابط صفحة الحضور إلى الحافظة');
   };
 
-  // Print QR Code
-  const handlePrintQR = () => {
+  // Print or Save as PDF formatted for A4
+  const handlePrintOrPDF = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      toast.error('يرجى السماح بفتح النوافذ المنبثقة للطباعة');
+      toast.error('يرجى السماح بفتح النوافذ المنبثقة للطباعة وتصدير PDF');
       return;
     }
 
     printWindow.document.write(`
+      <!DOCTYPE html>
       <html dir="rtl" lang="ar">
         <head>
-          <title>رمز QR لتسجيل الحضور والانصراف</title>
+          <meta charset="utf-8">
+          <title>رمز QR لتسجيل الحضور والانصراف - نظام المطعم</title>
           <style>
-            body { font-family: 'Cairo', system-ui, sans-serif; text-align: center; padding: 40px; margin: 0; }
-            .container { border: 3px dashed #334155; padding: 40px; border-radius: 24px; max-width: 500px; margin: 0 auto; }
-            h1 { font-size: 28px; margin-bottom: 8px; color: #0f172a; }
-            p { font-size: 16px; color: #475569; margin-bottom: 24px; }
-            .qr-wrapper { margin: 24px auto; }
-            .instructions { font-size: 14px; background: #f8fafc; padding: 16px; border-radius: 12px; margin-top: 24px; text-align: right; border: 1px solid #e2e8f0; }
-            .instructions ol { margin: 0; padding-right: 20px; color: #334155; }
+            @page {
+              size: A4 portrait;
+              margin: 15mm;
+            }
+            * { box-sizing: border-box; }
+            body {
+              font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Cairo", sans-serif;
+              margin: 0;
+              padding: 20px;
+              color: #0f172a;
+              background: #ffffff;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              min-height: 90vh;
+            }
+            .poster {
+              border: 3px solid #0f172a;
+              border-radius: 20px;
+              padding: 36px 30px;
+              width: 100%;
+              max-width: 650px;
+              text-align: center;
+              background: #ffffff;
+              box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+            }
+            .badge {
+              display: inline-block;
+              background: #0f172a;
+              color: #ffffff;
+              font-size: 13px;
+              font-weight: bold;
+              padding: 6px 18px;
+              border-radius: 9999px;
+              margin-bottom: 16px;
+              letter-spacing: 0.5px;
+            }
+            h1 {
+              font-size: 26px;
+              font-weight: 800;
+              margin: 0 0 8px 0;
+              color: #0f172a;
+            }
+            .subtitle {
+              font-size: 15px;
+              color: #475569;
+              margin-bottom: 24px;
+            }
+            .qr-box {
+              background: #ffffff;
+              border: 2px solid #e2e8f0;
+              border-radius: 16px;
+              padding: 24px;
+              display: inline-block;
+              margin: 0 auto 20px auto;
+            }
+            .qr-box svg {
+              display: block;
+              width: 240px;
+              height: 240px;
+            }
+            .token-info {
+              font-size: 11px;
+              color: #64748b;
+              font-family: monospace;
+              margin-bottom: 20px;
+            }
+            .instructions {
+              text-align: right;
+              background: #f8fafc;
+              border: 1px solid #e2e8f0;
+              border-radius: 12px;
+              padding: 16px 20px;
+              margin-top: 10px;
+            }
+            .instructions h3 {
+              margin: 0 0 10px 0;
+              font-size: 14px;
+              color: #1e293b;
+            }
+            .instructions ol {
+              margin: 0;
+              padding-right: 22px;
+              color: #334155;
+              font-size: 13px;
+              line-height: 1.8;
+            }
+            .footer-note {
+              margin-top: 20px;
+              font-size: 11px;
+              color: #94a3b8;
+            }
+            @media print {
+              body { padding: 0; }
+              .poster { border-width: 2px; }
+            }
           </style>
         </head>
         <body>
-          <div class="container">
+          <div class="poster">
+            <div class="badge">نظام الحضور والانصراف الذكي</div>
             <h1>تسجيل الحضور والانصراف</h1>
-            <p>امسح الرمز بكاميرا هاتفك لتسجيل الحضور أو الانصراف</p>
-            <div class="qr-wrapper">
+            <p class="subtitle">امسح رمز الاستجابة السريعة بكاميرا الهاتف لتسجيل الحضور أو الانصراف فوراً</p>
+            <div class="qr-box">
               ${qrPrintRef.current?.innerHTML || ''}
             </div>
+            <div class="token-info">رمز التحقق: ${hrSettings.attendance_token ? hrSettings.attendance_token.slice(0, 8) + '...' + hrSettings.attendance_token.slice(-4) : 'مفعل'}</div>
             <div class="instructions">
-              <strong>تعليمات للموظف:</strong>
+              <h3>خطوات الاستخدام للموظف:</h3>
               <ol>
-                <li>وجّه كاميرا الهاتف نحو رمز الـ QR أعلاه.</li>
-                <li>اضغط على الرابط الظاهر لفتح صفحة الحضور.</li>
-                <li>اختر اسمك من القائمة وأدخل رقم الـ PIN السري الخاص بك (4 أرقام).</li>
-                <li>سيتم تسجيل حضورك أو انصرافك تلقائياً وبدقة.</li>
+                <li>افتح تطبيق الكاميرا على هاتفك ووجّهه نحو الرمز.</li>
+                <li>اضغط على الرابط المنبثق لفتح صفحة الحضور.</li>
+                <li>اختر اسمك من قائمة موظفي المطعم.</li>
+                <li>أدخل الرمز السري الخاص بك (PIN المكون من 4 أرقام).</li>
+                <li>سيتم تسجيل حضورك أو انصرافك وحساب ساعات العمل تلقائياً.</li>
               </ol>
+            </div>
+            <div class="footer-note">
+              تم إصدار هذا الرمز بواسطة لوحة تحكم إدارة المطعم • للاستخدام المكتبي فقط
             </div>
           </div>
           <script>
-            window.onload = function() { window.print(); window.close(); }
+            window.onload = function() {
+              window.print();
+            };
           </script>
         </body>
       </html>
@@ -444,21 +568,66 @@ export default function HR() {
     printWindow.document.close();
   };
 
-  // Download QR Code as SVG
-  const handleDownloadQR = () => {
+  // Download QR Code as raster image (PNG 1024x1024 or JPEG 1024x1024)
+  const handleDownloadRaster = (format: 'png' | 'jpeg') => {
     const svgElement = qrPrintRef.current?.querySelector('svg');
-    if (!svgElement) return;
+    if (!svgElement) {
+      toast.error('تعذر العثور على رمز الـ QR');
+      return;
+    }
+
+    const svgData = new XMLSerializer().serializeToString(svgElement);
+    const canvas = document.createElement('canvas');
+    const size = 1024;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const img = new Image();
+    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+
+    img.onload = () => {
+      // Solid white background with quiet zone
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, size, size);
+      const padding = 80;
+      ctx.drawImage(img, padding, padding, size - padding * 2, size - padding * 2);
+      URL.revokeObjectURL(url);
+
+      const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+      const dataUrl = canvas.toDataURL(mimeType, 0.95);
+      const ext = format === 'jpeg' ? 'jpg' : 'png';
+      const downloadLink = document.createElement('a');
+      downloadLink.href = dataUrl;
+      downloadLink.download = `attendance_qr_${size}x${size}_${new Date().toISOString().split('T')[0]}.${ext}`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      toast.success(`تم تنزيل رمز QR بدقة فائقة (${ext.toUpperCase()} 1024px)`);
+    };
+    img.src = url;
+  };
+
+  // Download QR Code as SVG vector
+  const handleDownloadSVG = () => {
+    const svgElement = qrPrintRef.current?.querySelector('svg');
+    if (!svgElement) {
+      toast.error('تعذر العثور على رمز الـ QR');
+      return;
+    }
 
     const svgData = new XMLSerializer().serializeToString(svgElement);
     const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
     const svgUrl = URL.createObjectURL(svgBlob);
     const downloadLink = document.createElement('a');
     downloadLink.href = svgUrl;
-    downloadLink.download = `attendance_qr_${new Date().toISOString().split('T')[0]}.svg`;
+    downloadLink.download = `attendance_qr_vector_${new Date().toISOString().split('T')[0]}.svg`;
     document.body.appendChild(downloadLink);
     downloadLink.click();
     document.body.removeChild(downloadLink);
-    toast.success('تم تنزيل رمز QR بنجاح');
+    toast.success('تم تنزيل رمز QR كملف متجهي (SVG)');
   };
 
   // Get Current Location for Restaurant Coordinates
@@ -973,26 +1142,38 @@ export default function HR() {
                           )}
                         </TableCell>
                         <TableCell className="text-left">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setCorrectionRecord(rec);
-                              setCorrectionForm({
-                                employee_id: rec.employeeId,
-                                date: rec.date,
-                                checkIn: rec.checkIn || '09:00',
-                                checkOut: rec.checkOut || '17:00',
-                                status: rec.status || 'present',
-                                reason: rec.correctionReason || '',
-                              });
-                              setCorrectionModalOpen(true);
-                            }}
-                            className="h-8 text-xs gap-1"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                            تعديل
-                          </Button>
+                          <div className="flex items-center gap-1 justify-end">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setCorrectionRecord(rec);
+                                setCorrectionForm({
+                                  employee_id: rec.employeeId,
+                                  date: rec.date,
+                                  checkIn: rec.checkIn || '09:00',
+                                  checkOut: rec.checkOut || '17:00',
+                                  status: rec.status || 'present',
+                                  reason: rec.correctionReason || '',
+                                });
+                                setCorrectionModalOpen(true);
+                              }}
+                              className="h-8 text-xs gap-1"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                              تعديل
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeleteAttendanceRecord(rec)}
+                              className="h-8 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 gap-1"
+                              title="حذف سجل الحضور"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              حذف
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1039,14 +1220,53 @@ export default function HR() {
               </p>
 
               <div className="flex flex-col gap-2">
-                <Button onClick={handlePrintQR} className="w-full gap-2 text-xs">
+                <Button onClick={handlePrintOrPDF} className="w-full gap-2 text-xs">
                   <Printer className="w-4 h-4" />
-                  طباعة QR Code
+                  طباعة / تصدير PDF (A4)
                 </Button>
-                <Button onClick={handleDownloadQR} variant="outline" className="w-full gap-2 text-xs">
-                  <Download className="w-4 h-4" />
-                  تحميل صورة الرمز (SVG)
-                </Button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="w-full gap-2 text-xs justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Download className="w-4 h-4" />
+                        خيارات تنزيل الرمز
+                      </span>
+                      <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="center" className="w-60 text-xs">
+                    <DropdownMenuItem onClick={() => handleDownloadRaster('png')} className="gap-2 cursor-pointer py-2">
+                      <ImageIcon className="w-4 h-4 text-emerald-400" />
+                      <div>
+                        <div className="font-medium">تحميل عالي الدقة (PNG)</div>
+                        <div className="text-[10px] text-muted-foreground">1024x1024 بكسل بجودة فائقة</div>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDownloadRaster('jpeg')} className="gap-2 cursor-pointer py-2">
+                      <ImageIcon className="w-4 h-4 text-blue-400" />
+                      <div>
+                        <div className="font-medium">تحميل صورة (JPG)</div>
+                        <div className="text-[10px] text-muted-foreground">1024x1024 بكسل للمشاركة</div>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleDownloadSVG} className="gap-2 cursor-pointer py-2">
+                      <FileDown className="w-4 h-4 text-amber-400" />
+                      <div>
+                        <div className="font-medium">تحميل ملف متجهي (SVG)</div>
+                        <div className="text-[10px] text-muted-foreground">قابل للتكبير دون فقدان الجودة</div>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handlePrintOrPDF} className="gap-2 cursor-pointer py-2">
+                      <Printer className="w-4 h-4 text-indigo-400" />
+                      <div>
+                        <div className="font-medium">مستند A4 جاهز (PDF)</div>
+                        <div className="text-[10px] text-muted-foreground">مع تعليمات الاستخدام للموظفين</div>
+                      </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </Card>
 
@@ -1473,6 +1693,25 @@ export default function HR() {
                   />
                 </div>
               </div>
+
+              {/* Public Application URL */}
+              <div className="p-4 rounded-xl border bg-slate-950/40 space-y-2">
+                <Label className="text-xs font-bold text-slate-200">
+                  رابط النطاق الفعلي لصفحة الحضور (Production Base URL)
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  النطاق المستخدم لإنشاء روابط ورموز QR لضمان عملها عند المسح من هواتف الموظفين الخارجية.
+                </p>
+                <div className="flex gap-2 pt-1">
+                  <Input
+                    placeholder="https://mksystem-rose.vercel.app"
+                    value={hrSettings.public_app_url || ''}
+                    onChange={(e) => updateHrSettings({ public_app_url: e.target.value })}
+                    className="h-9 text-xs font-mono"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1805,6 +2044,7 @@ export default function HR() {
                               <TableHead>الساعات</TableHead>
                               <TableHead>التأخير</TableHead>
                               <TableHead>الحالة</TableHead>
+                              <TableHead className="text-left">حذف</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -1822,11 +2062,22 @@ export default function HR() {
                                     {statusLabels[r.status] || r.status}
                                   </Badge>
                                 </TableCell>
+                                <TableCell className="text-left">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setDeleteAttendanceRecord(r)}
+                                    className="h-7 w-7 text-muted-foreground hover:text-rose-400"
+                                    title="حذف سجل الحضور"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                </TableCell>
                               </TableRow>
                             ))}
                             {empRecords.length === 0 && (
                               <TableRow>
-                                <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                                <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
                                   لا توجد سجلات حضور لهذا الموظف حتى الآن
                                 </TableCell>
                               </TableRow>
@@ -2022,6 +2273,78 @@ export default function HR() {
               إلغاء
             </Button>
             <Button onClick={handleSaveShift}>حفظ الوردية</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ========================================================================= */}
+      {/* MODAL: DELETE ATTENDANCE RECORD CONFIRMATION                             */}
+      {/* ========================================================================= */}
+      <Dialog open={!!deleteAttendanceRecord} onOpenChange={(open) => !open && setDeleteAttendanceRecord(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-500">
+              <AlertTriangle className="w-5 h-5 text-rose-500" />
+              تأكيد حذف سجل الحضور
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              هل أنت متأكد من رغبتك في حذف سجل الحضور المحدد أدناه؟ هذا الإجراء فردي ولن يؤثر على باقي سجلات اليوم أو الموظفين الآخرين.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteAttendanceRecord && (
+            <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 space-y-2.5 text-sm my-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-muted-foreground">اسم الموظف:</span>
+                <span className="font-bold text-slate-100">{deleteAttendanceRecord.employeeName}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-muted-foreground">التاريخ:</span>
+                <span className="font-mono font-bold text-slate-100">{deleteAttendanceRecord.date}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-muted-foreground">وقت الحضور (Check-In):</span>
+                <span className="font-mono text-emerald-400 font-bold">{deleteAttendanceRecord.checkIn || 'غير مسجل'}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-muted-foreground">وقت الانصراف (Check-Out):</span>
+                <span className="font-mono text-indigo-400 font-bold">{deleteAttendanceRecord.checkOut || 'غير مسجل'}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-muted-foreground">الحالة الحالية:</span>
+                <Badge className={cn('text-[10px] border', statusColors[deleteAttendanceRecord.status])}>
+                  {statusLabels[deleteAttendanceRecord.status] || deleteAttendanceRecord.status}
+                </Badge>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteAttendanceRecord(null)}
+              disabled={isDeletingAttendance}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (!deleteAttendanceRecord) return;
+                setIsDeletingAttendance(true);
+                try {
+                  await deleteAttendance(deleteAttendanceRecord.id);
+                  setDeleteAttendanceRecord(null);
+                } finally {
+                  setIsDeletingAttendance(false);
+                }
+              }}
+              disabled={isDeletingAttendance}
+              className="gap-1.5"
+            >
+              <Trash2 className="w-4 h-4" />
+              {isDeletingAttendance ? 'جاري الحذف...' : 'تأكيد الحذف نهائياً'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

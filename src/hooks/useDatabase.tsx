@@ -1213,6 +1213,7 @@ export interface HrSettings {
   late_deduction_enabled: boolean;
   early_leave_deduction_enabled: boolean;
   overtime_enabled: boolean;
+  public_app_url?: string;
 }
 
 const DEFAULT_HR_SETTINGS: HrSettings = {
@@ -1227,6 +1228,7 @@ const DEFAULT_HR_SETTINGS: HrSettings = {
   late_deduction_enabled: false,
   early_leave_deduction_enabled: false,
   overtime_enabled: false,
+  public_app_url: 'https://mksystem-rose.vercel.app',
 };
 
 export function useHR(tenantId: string | null) {
@@ -1523,11 +1525,42 @@ export function useHR(tenantId: string | null) {
     } catch (e: any) { toast.error('خطأ في الحذف: ' + e.message); return false; }
   };
 
+  const deleteAttendance = async (attendanceId: string) => {
+    if (!attendanceId) return false;
+    try {
+      const record = attendance.find(a => a.id === attendanceId);
+      await deleteDoc(doc(db, 'attendance', attendanceId));
+
+      if (tenantId) {
+        await addDoc(collection(db, 'audit_logs'), {
+          tenant_id: tenantId,
+          action: 'attendance_record_deleted',
+          entity: 'attendance',
+          target_id: attendanceId,
+          user: 'المدير',
+          details: `حذف سجل حضور للموظف: ${record?.employee_name || record?.employee_id || attendanceId} - تاريخ: ${record?.date || 'غير محدد'}`,
+          severity: 'warning',
+          created_at: new Date().toISOString()
+        });
+      }
+
+      await fetchAll();
+      toast.success('تم حذف سجل الحضور بنجاح');
+      return true;
+    } catch (e: any) {
+      toast.error('خطأ في حذف سجل الحضور: ' + e.message);
+      return false;
+    }
+  };
+
   const updateHrSettings = async (updates: Partial<HrSettings>) => {
     if (!tenantId) return false;
     try {
       const nextSettings = { ...hrSettings, ...updates };
-      await setDoc(doc(db, 'hr_settings', tenantId), nextSettings, { merge: true });
+      await setDoc(doc(db, 'hr_settings', tenantId), { ...nextSettings, tenant_id: tenantId }, { merge: true });
+      if (updates.attendance_token) {
+        await updateDoc(doc(db, 'tenants', tenantId), { attendance_token: updates.attendance_token }).catch(() => {});
+      }
       setHrSettings(nextSettings);
       toast.success('تم حفظ إعدادات الموارد البشرية بنجاح');
       return true;
@@ -1546,6 +1579,9 @@ export function useHR(tenantId: string | null) {
         attendance_token: newToken,
         attendance_token_rotated_at: rotatedAt
       });
+
+      // Also ensure sync to tenant doc
+      await updateDoc(doc(db, 'tenants', tenantId), { attendance_token: newToken }).catch(() => {});
 
       // Log in audit
       await addDoc(collection(db, 'audit_logs'), {
@@ -1578,6 +1614,7 @@ export function useHR(tenantId: string | null) {
     deleteEmployee,
     addAttendance,
     updateAttendance,
+    deleteAttendance,
     manualCorrectAttendance,
     addShift,
     updateShift,

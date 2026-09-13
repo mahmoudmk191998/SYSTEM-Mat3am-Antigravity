@@ -4,6 +4,7 @@ import {
   recordPublicClock,
   manualCorrectAttendance,
   rotateAttendanceToken,
+  deleteAttendanceRecord,
 } from '../../controllers/attendance.controller.js';
 import { authenticateApiKey } from '../../middleware/auth.middleware.js';
 import { validateRequest } from '../../middleware/validator.middleware.js';
@@ -34,4 +35,10 @@ attendanceRouter.post(
   '/attendance/rotate-qr-token',
   authenticateApiKey,
   rotateAttendanceToken
+);
+
+attendanceRouter.delete(
+  '/attendance/:attendanceId',
+  authenticateApiKey,
+  deleteAttendanceRecord
 );

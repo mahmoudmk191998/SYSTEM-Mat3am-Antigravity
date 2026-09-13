@@ -76,6 +76,12 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
+    // HR Attendance Settings (Public read for unauthenticated QR token validation)
+    match /hr_settings/{tenantId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
     // Menu Catalog, Items, Categories, Addons
     match /menu_categories/{categoryId} {
       allow read, write: if isAuthenticated();

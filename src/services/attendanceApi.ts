@@ -8,6 +8,7 @@ import {
   getDoc,
   addDoc,
   updateDoc,
+  deleteDoc,
 } from 'firebase/firestore';
 import {
   verifyPin,
@@ -78,15 +79,26 @@ export async function fetchPublicAttendanceInfo(token: string): Promise<PublicAt
       return data.data;
     }
 
-    if (res.status === 404 || res.status === 403 || res.status === 400) {
-      const errorJson = await res.json().catch(() => ({}));
+    const errorJson = await res.json().catch(() => ({}));
+    // If backend route is not found (e.g. 404 route not deployed yet on server), fall back to Firestore client
+    if (
+      res.status === 404 &&
+      (errorJson.code === 'NOT_FOUND' || (typeof errorJson.message === 'string' && errorJson.message.toLowerCase().includes('route')))
+    ) {
+      console.warn('Backend public info route not found on server, using direct Firestore fallback...');
+    } else if (res.status === 404 || res.status === 403 || res.status === 400) {
       throw new Error(errorJson.message || 'رمز الحضور غير صالح أو منتهي الصلاحية');
     }
   } catch (err: any) {
-    if (err.message && !err.message.includes('Failed to fetch')) {
+    if (
+      err.message &&
+      !err.message.includes('Failed to fetch') &&
+      !err.message.toLowerCase().includes('route') &&
+      !err.message.includes('NetworkError')
+    ) {
       throw err;
     }
-    // Fallback to client-side Firestore if backend server is unreachable
+    // Fallback to client-side Firestore if backend server is unreachable or route 404
   }
 
   // 2. Client-side Firestore fallback
@@ -186,16 +198,26 @@ export async function submitPublicClock(payload: {
       body: JSON.stringify(payload),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (res.ok && data.success) {
       return data.data;
     }
 
-    if (!res.ok) {
+    if (
+      res.status === 404 &&
+      (data.code === 'NOT_FOUND' || (typeof data.message === 'string' && data.message.toLowerCase().includes('route')))
+    ) {
+      console.warn('Backend clock route not found on server, using direct Firestore fallback...');
+    } else if (!res.ok) {
       throw new Error(data.message || 'فشل تسجيل الحضور');
     }
   } catch (err: any) {
-    if (err.message && !err.message.includes('Failed to fetch')) {
+    if (
+      err.message &&
+      !err.message.includes('Failed to fetch') &&
+      !err.message.toLowerCase().includes('route') &&
+      !err.message.includes('NetworkError')
+    ) {
       throw err;
     }
     // Fallback to client-side Firestore
@@ -378,4 +400,33 @@ export async function submitPublicClock(payload: {
     hours,
     message: `تم تسجيل الانصراف بنجاح (ساعات العمل: ${hoursDisplay}س ${minsDisplay}د)`,
   };
+}
+
+/**
+ * Delete single attendance record by ID with backend API or direct Firestore fallback
+ */
+export async function deleteAttendanceRecordApi(attendanceId: string, token?: string): Promise<boolean> {
+  if (!attendanceId) return false;
+
+  // Try Backend API if token is provided
+  if (token) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/attendance/${encodeURIComponent(attendanceId)}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (res.ok) {
+        return true;
+      }
+    } catch {
+      // Fall back to direct Firestore
+    }
+  }
+
+  // Direct Firestore deletion
+  await deleteDoc(doc(db, 'attendance', attendanceId));
+  return true;
 }
