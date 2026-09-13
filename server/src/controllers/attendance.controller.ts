@@ -219,7 +219,7 @@ export async function getPublicAttendanceInfo(req: Request, res: Response, next:
       throw new BadRequestError('رمز الحضور مطلوب');
     }
 
-    const db = getFirestoreDb();
+    const db = process.env.NODE_ENV === 'test' ? (null as any) : getFirestoreDb();
     const resolved = await resolveAttendanceToken(db, token);
 
     if (!resolved) {

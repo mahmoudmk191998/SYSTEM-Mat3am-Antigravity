@@ -82,6 +82,35 @@ service cloud.firestore {
       allow write: if isAuthenticated();
     }
 
+    // HR Employees (Public read for active employee selection in QR screen; modifications restricted to authenticated managers)
+    match /employees/{employeeId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // HR Shifts (Public read for shift schedule calculations)
+    match /shifts/{shiftId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // HR Attendance Records
+    // Public attendance screen can check status (read), check-in (create), and check-out (update).
+    // Deletion is STRICTLY RESTRICTED to authenticated managers only.
+    match /attendance/{attendanceId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if isAuthenticated();
+    }
+
+    // Audit Logs (Authenticated read; creation allowed for audit trail; no deletion)
+    match /audit_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if true;
+      allow update, delete: if false;
+    }
+
     // Menu Catalog, Items, Categories, Addons
     match /menu_categories/{categoryId} {
       allow read, write: if isAuthenticated();

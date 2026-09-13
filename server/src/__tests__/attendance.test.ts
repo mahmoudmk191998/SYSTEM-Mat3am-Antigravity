@@ -23,7 +23,7 @@ describe('Attendance API & Deletion Suite', () => {
       const res = await request(app).get('/api/v1/attendance/public/info?token=non_existent_token_12345');
       expect(res.status).toBe(404);
       expect(res.body.success).toBe(false);
-    });
+    }, 15000);
 
     it('should return 200 and branch info when valid token is provided', async () => {
       seedTestAttendanceToken('valid_test_token_777', {

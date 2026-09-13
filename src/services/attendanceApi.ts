@@ -64,72 +64,77 @@ export interface ClockResult {
 }
 
 /**
- * Fetch public attendance session info by QR token
+ * Fetch public attendance session info directly from Firestore (No external server required)
  */
 export async function fetchPublicAttendanceInfo(token: string): Promise<PublicAttendanceInfo> {
-  // 1. Try Backend API first
-  try {
-    const res = await fetch(`${API_BASE_URL}/attendance/public/info?token=${encodeURIComponent(token)}`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      return data.data;
-    }
-
-    const errorJson = await res.json().catch(() => ({}));
-    // If backend route is not found (e.g. 404 route not deployed yet on server), fall back to Firestore client
-    if (
-      res.status === 404 &&
-      (errorJson.code === 'NOT_FOUND' || (typeof errorJson.message === 'string' && errorJson.message.toLowerCase().includes('route')))
-    ) {
-      console.warn('Backend public info route not found on server, using direct Firestore fallback...');
-    } else if (res.status === 404 || res.status === 403 || res.status === 400) {
-      throw new Error(errorJson.message || 'رمز الحضور غير صالح أو منتهي الصلاحية');
-    }
-  } catch (err: any) {
-    if (
-      err.message &&
-      !err.message.includes('Failed to fetch') &&
-      !err.message.toLowerCase().includes('route') &&
-      !err.message.includes('NetworkError')
-    ) {
-      throw err;
-    }
-    // Fallback to client-side Firestore if backend server is unreachable or route 404
+  const cleanToken = (token || '').trim();
+  if (!cleanToken) {
+    throw new Error('رابط الحضور غير صالح. لم يتم تحديد رمز الحضور (Attendance Token).');
   }
 
-  // 2. Client-side Firestore fallback
   let tenantId: string | null = null;
   let branchId: string | null = null;
   let branchName = 'المطعم';
   let hrSettings: any = {};
 
-  // Check branches
-  const branchSnap = await getDocs(query(collection(db, 'branches'), where('attendance_token', '==', token)));
-  if (!branchSnap.empty) {
-    const bDoc = branchSnap.docs[0];
-    branchId = bDoc.id;
-    tenantId = bDoc.data().tenant_id;
-    branchName = bDoc.data().name || 'الفرع';
-    hrSettings = bDoc.data().hr_settings || {};
-  } else {
-    // Check hr_settings
-    const hrSnap = await getDocs(query(collection(db, 'hr_settings'), where('attendance_token', '==', token)));
+  // 1. Check hr_settings collection by attendance_token field
+  try {
+    const hrSnap = await getDocs(
+      query(collection(db, 'hr_settings'), where('attendance_token', '==', cleanToken))
+    );
     if (!hrSnap.empty) {
       const sDoc = hrSnap.docs[0];
       hrSettings = sDoc.data();
-      tenantId = sDoc.id;
-    } else {
-      // Check tenants
-      const tSnap = await getDocs(query(collection(db, 'tenants'), where('attendance_token', '==', token)));
+      tenantId = hrSettings.tenant_id || sDoc.id;
+    }
+  } catch (err: any) {
+    console.warn('Error querying hr_settings by token:', err);
+  }
+
+  // 2. Direct document lookup in hr_settings by ID (if token matches tenant ID)
+  if (!tenantId) {
+    try {
+      const directDoc = await getDoc(doc(db, 'hr_settings', cleanToken));
+      if (directDoc.exists()) {
+        hrSettings = directDoc.data();
+        tenantId = hrSettings.tenant_id || directDoc.id;
+      }
+    } catch (err: any) {
+      console.warn('Error fetching hr_settings by doc ID:', err);
+    }
+  }
+
+  // 3. Fallback: Check branches collection by attendance_token field
+  if (!tenantId) {
+    try {
+      const branchSnap = await getDocs(
+        query(collection(db, 'branches'), where('attendance_token', '==', cleanToken))
+      );
+      if (!branchSnap.empty) {
+        const bDoc = branchSnap.docs[0];
+        branchId = bDoc.id;
+        tenantId = bDoc.data().tenant_id;
+        branchName = bDoc.data().name || 'الفرع';
+        hrSettings = bDoc.data().hr_settings || {};
+      }
+    } catch (err: any) {
+      console.warn('Error querying branches by token:', err);
+    }
+  }
+
+  // 4. Fallback: Check tenants collection by attendance_token field
+  if (!tenantId) {
+    try {
+      const tSnap = await getDocs(
+        query(collection(db, 'tenants'), where('attendance_token', '==', cleanToken))
+      );
       if (!tSnap.empty) {
         tenantId = tSnap.docs[0].id;
         branchName = tSnap.docs[0].data().name || 'المطعم';
         hrSettings = tSnap.docs[0].data().hr_settings || {};
       }
+    } catch (err: any) {
+      console.warn('Error querying tenants by token:', err);
     }
   }
 
@@ -137,35 +142,57 @@ export async function fetchPublicAttendanceInfo(token: string): Promise<PublicAt
     throw new Error('رمز الحضور غير صالح أو منتهي الصلاحية');
   }
 
-  // Check if tenant has hr_settings doc
-  const settingsDoc = await getDoc(doc(db, 'hr_settings', tenantId));
-  if (settingsDoc.exists()) {
-    hrSettings = { ...hrSettings, ...settingsDoc.data() };
+  // Merge root hr_settings document if needed
+  try {
+    const settingsDoc = await getDoc(doc(db, 'hr_settings', tenantId));
+    if (settingsDoc.exists()) {
+      hrSettings = { ...hrSettings, ...settingsDoc.data() };
+    }
+  } catch (_) {}
+
+  // Fetch branch/restaurant display name if still default
+  if (branchName === 'المطعم' && tenantId) {
+    try {
+      const tDoc = await getDoc(doc(db, 'tenants', tenantId));
+      if (tDoc.exists() && tDoc.data().name) {
+        branchName = tDoc.data().name;
+      }
+    } catch (_) {}
   }
 
   if (hrSettings.attendance_enabled === false) {
-    throw new Error('تسجيل الحضور والانصراف معطل حالياً');
+    throw new Error('تسجيل الحضور والانصراف معطل حالياً من قبل الإدارة');
   }
 
-  // Fetch active employees (sanitized)
-  const empSnap = await getDocs(
-    query(collection(db, 'employees'), where('tenant_id', '==', tenantId), where('status', '==', 'active'))
-  );
+  if (hrSettings.qr_attendance_enabled === false) {
+    throw new Error('تسجيل الحضور عبر رمز الـ QR معطل حالياً');
+  }
 
-  const employees: PublicEmployee[] = empSnap.docs.map((d) => {
-    const data = d.data();
-    return {
-      id: d.id,
-      name: data.name || '',
-      phone: data.phone || '',
-      role: data.role || '',
-      department: data.department || '',
-      shift_id: data.default_shift_id || data.shift_id || null,
-      pin_set: Boolean(data.pin_hash || data.pin),
-    };
-  });
+  // Fetch active employees (Strictly sanitized: NO salary, NO pin_hash)
+  let employees: PublicEmployee[] = [];
+  try {
+    const empSnap = await getDocs(
+      query(collection(db, 'employees'), where('tenant_id', '==', tenantId), where('status', '==', 'active'))
+    );
 
-  employees.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+    employees = empSnap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        name: data.name || '',
+        phone: data.phone || '',
+        role: data.role || '',
+        department: data.department || '',
+        shift_id: data.default_shift_id || data.shift_id || null,
+        pin_set: Boolean(data.pin_hash || data.pin),
+      };
+    });
+
+    employees.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+  } catch (err: any) {
+    console.error('Error fetching active employees:', err);
+    throw new Error('تعذر تحميل قائمة الموظفين. يرجى مراجعة اتصال الإنترنت.');
+  }
 
   return {
     tenantId,
@@ -180,7 +207,7 @@ export async function fetchPublicAttendanceInfo(token: string): Promise<PublicAt
 }
 
 /**
- * Submit clock-in or clock-out
+ * Submit clock-in or clock-out directly to Firestore
  */
 export async function submitPublicClock(payload: {
   token: string;
@@ -190,40 +217,6 @@ export async function submitPublicClock(payload: {
   idempotencyKey?: string;
   location?: { latitude: number; longitude: number };
 }): Promise<ClockResult> {
-  // 1. Try Backend API first
-  try {
-    const res = await fetch(`${API_BASE_URL}/attendance/public/clock`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data.success) {
-      return data.data;
-    }
-
-    if (
-      res.status === 404 &&
-      (data.code === 'NOT_FOUND' || (typeof data.message === 'string' && data.message.toLowerCase().includes('route')))
-    ) {
-      console.warn('Backend clock route not found on server, using direct Firestore fallback...');
-    } else if (!res.ok) {
-      throw new Error(data.message || 'فشل تسجيل الحضور');
-    }
-  } catch (err: any) {
-    if (
-      err.message &&
-      !err.message.includes('Failed to fetch') &&
-      !err.message.toLowerCase().includes('route') &&
-      !err.message.includes('NetworkError')
-    ) {
-      throw err;
-    }
-    // Fallback to client-side Firestore
-  }
-
-  // 2. Client-side Firestore fallback
   const { employeeId, pin, location } = payload;
 
   // Rate-limiting check
