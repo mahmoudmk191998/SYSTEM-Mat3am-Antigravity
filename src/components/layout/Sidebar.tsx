@@ -323,122 +323,126 @@ export function Sidebar() {
   return (
     <AnimatePresence>
       {bottomNavVisible ? (
-        <motion.nav
-          key="bottom-dock-nav"
-          ref={navRef}
-          initial={{ y: 50, opacity: 0, scale: 0.95 }}
-          animate={{ y: 0, opacity: 1, scale: 1 }}
-          exit={{ y: 50, opacity: 0, scale: 0.95 }}
-          transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
-          className="hidden md:flex fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-4"
-        >
-          {/* Pop-up Group Menu */}
-          {activeGroup && (
-            <div className="dynamic-island px-4 py-3 min-w-[200px] flex justify-center gap-2 animate-fade-in origin-bottom">
-              {navGroups.find(g => g.title === activeGroup)?.items.filter(item => isAdmin || hasAnyPermission(item.perms)).map((item) => {
-                const isActive = location.pathname === item.path;
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    className={cn(
-                      'flex items-center gap-2 px-4 py-2 rounded-2xl transition-all duration-300',
-                      isActive ? 'bg-primary text-primary-foreground font-bold shadow-[0_0_15px_rgba(var(--primary),0.5)] scale-110' : 'hover:bg-white/10 text-white/70 hover:text-white'
-                    )}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span className="text-[13px] whitespace-nowrap">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Main Bottom Dock */}
-          <div className="bg-card/70 backdrop-blur-[40px] px-4 py-3 rounded-full border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.1)] flex items-center justify-center gap-2">
-            <Link to="/" className="w-12 h-12 rounded-full bg-gradient-to-tr from-primary to-primary/80 shadow-[0_0_20px_rgba(var(--primary),0.4)] flex items-center justify-center border border-white/20 hover:scale-110 transition-transform mr-2">
-              <img src={mkLogo} alt="MK" className="w-8 h-8 object-contain bg-white rounded-full p-1" />
-            </Link>
-            <div className="w-px h-8 bg-white/10 mx-2" />
-
-            {navGroups.map((group) => {
-              const allowedItems = group.items.filter((item: any) => isAdmin || hasAnyPermission(item.perms));
-              if (allowedItems.length === 0) return null;
-
-              if (group.title === 'الرئيسية') return null; // handled via logo
-
-              const GroupIcon = allowedItems[0].icon;
-              const isActive = group.title === activeGroup || allowedItems.some(item => location.pathname === item.path);
-
-              return (
-                <Tooltip key={group.title} delayDuration={0}>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => setActiveGroup(activeGroup === group.title ? null : group.title)}
+        <div className="hidden md:flex fixed inset-x-0 bottom-6 z-[100] justify-center pointer-events-none">
+          <motion.nav
+            key="bottom-dock-nav"
+            ref={navRef}
+            initial={{ y: 50, opacity: 0, scale: 0.95 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 50, opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
+            className="pointer-events-auto flex flex-col items-center gap-4"
+          >
+            {/* Pop-up Group Menu */}
+            {activeGroup && (
+              <div className="dynamic-island px-4 py-3 min-w-[200px] flex justify-center gap-2 animate-fade-in origin-bottom">
+                {navGroups.find(g => g.title === activeGroup)?.items.filter(item => isAdmin || hasAnyPermission(item.perms)).map((item) => {
+                  const isActive = location.pathname === item.path;
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
                       className={cn(
-                        'dock-item group relative outline-none',
-                        isActive ? 'dock-item-active z-10 scale-110' : 'hover:scale-125 hover:z-20 hover:mx-2'
+                        'flex items-center gap-2 px-4 py-2 rounded-2xl transition-all duration-300',
+                        isActive ? 'bg-primary text-primary-foreground font-bold shadow-[0_0_15px_rgba(var(--primary),0.5)] scale-110' : 'hover:bg-white/10 text-white/70 hover:text-white'
                       )}
                     >
-                      <GroupIcon className="w-6 h-6 transition-transform group-hover:-translate-y-1" />
-                      <span className="sr-only">{group.title}</span>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" sideOffset={16} className="font-cairo font-bold rounded-2xl bg-black/90 backdrop-blur-md border-white/10 shadow-2xl z-[110]">
-                    {group.title}
-                  </TooltipContent>
-                </Tooltip>
-              );
-            })}
+                      <Icon className="w-4 h-4" />
+                      <span className="text-[13px] whitespace-nowrap">{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
 
-            {/* Hide Bottom Nav Button */}
-            <div className="w-px h-8 bg-white/10 mx-1" />
+            {/* Main Bottom Dock */}
+            <div className="bg-card/70 backdrop-blur-[40px] px-4 py-3 rounded-full border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.1)] flex items-center justify-center gap-2">
+              <Link to="/" className="w-12 h-12 rounded-full bg-gradient-to-tr from-primary to-primary/80 shadow-[0_0_20px_rgba(var(--primary),0.4)] flex items-center justify-center border border-white/20 hover:scale-110 transition-transform mr-2">
+                <img src={mkLogo} alt="MK" className="w-8 h-8 object-contain bg-white rounded-full p-1" />
+              </Link>
+              <div className="w-px h-8 bg-white/10 mx-2" />
+
+              {navGroups.map((group) => {
+                const allowedItems = group.items.filter((item: any) => isAdmin || hasAnyPermission(item.perms));
+                if (allowedItems.length === 0) return null;
+
+                if (group.title === 'الرئيسية') return null; // handled via logo
+
+                const GroupIcon = allowedItems[0].icon;
+                const isActive = group.title === activeGroup || allowedItems.some(item => location.pathname === item.path);
+
+                return (
+                  <Tooltip key={group.title} delayDuration={0}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => setActiveGroup(activeGroup === group.title ? null : group.title)}
+                        className={cn(
+                          'dock-item group relative outline-none',
+                          isActive ? 'dock-item-active z-10 scale-110' : 'hover:scale-125 hover:z-20 hover:mx-2'
+                        )}
+                      >
+                        <GroupIcon className="w-6 h-6 transition-transform group-hover:-translate-y-1" />
+                        <span className="sr-only">{group.title}</span>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={16} className="font-cairo font-bold rounded-2xl bg-black/90 backdrop-blur-md border-white/10 shadow-2xl z-[110]">
+                      {group.title}
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+
+              {/* Hide Bottom Nav Button */}
+              <div className="w-px h-8 bg-white/10 mx-1" />
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setBottomNavVisible(false)}
+                    className="dock-item group relative outline-none hover:text-rose-400 p-2 rounded-full transition-all"
+                    aria-label="إخفاء شريط القوائم"
+                  >
+                    <EyeOff className="w-5 h-5 text-white/50 group-hover:text-rose-400 group-hover:scale-110 transition-all" />
+                    <span className="sr-only">إخفاء شريط القوائم</span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={16} className="font-cairo font-bold text-xs rounded-xl bg-black/90 backdrop-blur-md border-white/10 shadow-2xl z-[110]">
+                  إخفاء شريط القوائم (Ctrl+B)
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </motion.nav>
+        </div>
+      ) : (
+        /* Reveal / Restore Floating Button when Hidden */
+        <div className="hidden md:flex fixed inset-x-0 bottom-3 z-[100] justify-center pointer-events-none">
+          <motion.div
+            key="bottom-reveal-btn"
+            initial={{ y: 30, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 30, opacity: 0 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="pointer-events-auto"
+          >
             <Tooltip delayDuration={0}>
               <TooltipTrigger asChild>
                 <button
-                  onClick={() => setBottomNavVisible(false)}
-                  className="dock-item group relative outline-none hover:text-rose-400 p-2 rounded-full transition-all"
-                  aria-label="إخفاء شريط القوائم"
+                  onClick={() => setBottomNavVisible(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-card/85 hover:bg-card backdrop-blur-[40px] border border-white/20 shadow-[0_15px_35px_rgba(0,0,0,0.5)] text-foreground hover:text-primary transition-all duration-300 hover:scale-105 group text-xs font-bold font-cairo outline-none"
                 >
-                  <EyeOff className="w-5 h-5 text-white/50 group-hover:text-rose-400 group-hover:scale-110 transition-all" />
-                  <span className="sr-only">إخفاء شريط القوائم</span>
+                  <Eye className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+                  <span>إظهار شريط القوائم</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 font-mono text-muted-foreground border border-white/10">
+                    Ctrl+B
+                  </span>
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="top" sideOffset={16} className="font-cairo font-bold text-xs rounded-xl bg-black/90 backdrop-blur-md border-white/10 shadow-2xl z-[110]">
-                إخفاء شريط القوائم (Ctrl+B)
+              <TooltipContent side="top" sideOffset={12} className="font-cairo font-bold text-xs rounded-xl bg-black/90 backdrop-blur-md border-white/10 z-[110]">
+                إظهار شريط القوائم السفلي
               </TooltipContent>
             </Tooltip>
-          </div>
-        </motion.nav>
-      ) : (
-        /* Reveal / Restore Floating Button when Hidden */
-        <motion.div
-          key="bottom-reveal-btn"
-          initial={{ y: 30, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 30, opacity: 0 }}
-          transition={{ duration: 0.25, ease: 'easeOut' }}
-          className="hidden md:flex fixed bottom-3 left-1/2 -translate-x-1/2 z-[100]"
-        >
-          <Tooltip delayDuration={0}>
-            <TooltipTrigger asChild>
-              <button
-                onClick={() => setBottomNavVisible(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-card/85 hover:bg-card backdrop-blur-[40px] border border-white/20 shadow-[0_15px_35px_rgba(0,0,0,0.5)] text-foreground hover:text-primary transition-all duration-300 hover:scale-105 group text-xs font-bold font-cairo outline-none"
-              >
-                <Eye className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
-                <span>إظهار شريط القوائم</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 font-mono text-muted-foreground border border-white/10">
-                  Ctrl+B
-                </span>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={12} className="font-cairo font-bold text-xs rounded-xl bg-black/90 backdrop-blur-md border-white/10 z-[110]">
-              إظهار شريط القوائم السفلي
-            </TooltipContent>
-          </Tooltip>
-        </motion.div>
+          </motion.div>
+        </div>
       )}
     </AnimatePresence>
   );
