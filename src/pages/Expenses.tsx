@@ -62,6 +62,8 @@ export default function Expenses() {
     disburseSalaryPayment,
     voidSalaryPayment,
     createAdvance,
+    cancelAdvance,
+    deleteAdvance,
     getKPIs,
   } = usePayroll(tenantId, branchId);
 
@@ -386,6 +388,8 @@ export default function Expenses() {
                 return ok;
               }}
               onCreateAdvance={createAdvance}
+              onDeleteAdvance={deleteAdvance}
+              onCancelAdvance={cancelAdvance}
               isSubmittingPayment={isSubmittingPayment}
             />
 

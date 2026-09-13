@@ -95,6 +95,7 @@ export default function HR() {
     voidSalaryPayment,
     createAdvance,
     cancelAdvance,
+    deleteAdvance,
     reverseAdvanceInstallment,
     getKPIs,
   } = usePayroll(tenantId, branchId);
@@ -1494,6 +1495,8 @@ export default function HR() {
             onDisbursePayment={disburseSalaryPayment}
             onVoidPayment={voidSalaryPayment}
             onCreateAdvance={createAdvance}
+            onDeleteAdvance={deleteAdvance}
+            onCancelAdvance={cancelAdvance}
             isSubmittingPayment={isSubmittingPayment}
           />
         </TabsContent>
@@ -1970,6 +1973,7 @@ export default function HR() {
                     installments={advanceInstallments}
                     onCreateAdvance={createAdvance}
                     onCancelAdvance={cancelAdvance}
+                    onDeleteAdvance={deleteAdvance}
                     onVoidPayment={voidSalaryPayment}
                     onReverseInstallment={reverseAdvanceInstallment}
                     isProcessing={isProcessingCancellation}

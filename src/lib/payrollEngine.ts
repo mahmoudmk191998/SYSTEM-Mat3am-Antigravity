@@ -551,3 +551,59 @@ export function calculateActiveExpenseTotals(
 
   return { totalActive, totalVoided, salaryExpenses };
 }
+
+/**
+ * Pure function: Evaluates whether an advance can be Hard Deleted or if it must be Cancelled.
+ * Strict Rule:
+ * - If NO financial activity has occurred (paidAmount === 0, no paid installments, no deducted periods linked to paid salaries):
+ *   Hard delete is allowed.
+ * - If ANY financial activity has occurred:
+ *   Hard delete is REJECTED. Cancel/Void must be used instead.
+ */
+export function canDeleteAdvance(
+  advance: Advance,
+  installments?: AdvanceInstallment[],
+  payments?: SalaryPayment[]
+): { allowed: boolean; reason?: string } {
+  // 1. Check if any paid amount exists
+  if ((advance.paidAmount || 0) > 0) {
+    return {
+      allowed: false,
+      reason: 'لا يمكن حذف هذه السلفة نهائيًا لأنها تحتوي على عمليات مالية سابقة (تم سداد جزء منها). يمكنك إلغاؤها بدلًا من ذلك مع إيقاف الأقساط المستقبلية.',
+    };
+  }
+
+  // 2. Check if any installment was marked paid
+  if (installments && installments.length > 0) {
+    const paidInstallment = installments.find(
+      (i) => i.advanceId === advance.id && i.status === 'paid' && i.amount > 0
+    );
+    if (paidInstallment) {
+      return {
+        allowed: false,
+        reason: 'لا يمكن حذف هذه السلفة نهائيًا لوجود أقساط مسددة مرتبطة بها.',
+      };
+    }
+  }
+
+  // 3. Check if deducted in any payroll period that resulted in actual completed salary payments
+  if (advance.deductedPeriods && advance.deductedPeriods.length > 0) {
+    if (payments && payments.length > 0) {
+      const activePaymentsForPeriods = payments.filter(
+        (p) =>
+          p.employeeId === advance.employeeId &&
+          p.status === 'completed' &&
+          advance.deductedPeriods.includes(p.payrollPeriod)
+      );
+      if (activePaymentsForPeriods.length > 0) {
+        return {
+          allowed: false,
+          reason: 'لا يمكن حذف هذه السلفة نهائيًا لأنها خُصمت بالفعل في مسيرات رواتب تم صرفها.',
+        };
+      }
+    }
+  }
+
+  return { allowed: true };
+}
+

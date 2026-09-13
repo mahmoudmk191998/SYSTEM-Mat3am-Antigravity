@@ -27,6 +27,7 @@ import {
   calculateEmployeePayroll,
   calculateAdvanceDueInstallment,
   applyAdvanceDeduction,
+  canDeleteAdvance,
   type EmployeeData,
   type AttendanceRecordData,
 } from '@/lib/payrollEngine';
@@ -609,6 +610,26 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
         })
       );
 
+      // Cancel future unpaid installments linked to this advance
+      const linkedUnpaidInstallments = advanceInstallments.filter(
+        (i) => i.advanceId === advanceId && i.status !== 'paid' && i.status !== 'voided'
+      );
+      for (const inst of linkedUnpaidInstallments) {
+        try {
+          await updateDoc(
+            doc(db, 'advance_installments', inst.id),
+            sanitizeForFirestore({
+              status: 'cancelled',
+              voidReason: `إلغاء السلفة: ${reason.trim()}`,
+              voidedAt: nowIso,
+              voidedBy: performedByName,
+            })
+          );
+        } catch (e) {
+          console.warn('Could not cancel installment:', inst.id, e);
+        }
+      }
+
       // Audit Log
       await addDoc(
         collection(db, 'audit_logs'),
@@ -643,6 +664,104 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
       console.error('Error cancelling advance:', err);
       toast.error('خطأ أثناء إلغاء السلفة: ' + err.message);
       return false;
+    } finally {
+      setIsProcessingCancellation(false);
+    }
+  };
+
+  /**
+   * Safely Hard Deletes an advance IF AND ONLY IF it has no financial activity:
+   * - Rule: paidAmount === 0, no paid installments, no deducted periods linked to paid salaries.
+   * - If any financial activity exists: Rejects hard deletion and instructs caller to cancel instead.
+   * - Enforces role permissions (Admin, Owner, Manager).
+   * - Requires mandatory reason (e.g. "تم تسجيل السلفة بالخطأ").
+   * - Records ADVANCE_DELETED audit log before deletion.
+   * - Cleans up any linked unpaid advance_installments.
+   * - Idempotent & prevents double-delete concurrency.
+   * - Immediately updates in-memory states (advances, advanceInstallments).
+   */
+  const deleteAdvance = async (
+    advanceId: string,
+    reason: string,
+    currentUser?: any
+  ): Promise<{ success: boolean; message?: string }> => {
+    if (!tenantId) return { success: false, message: 'لم يتم تحديد المتجر/المطعم' };
+    if (isProcessingCancellation) return { success: false, message: 'جاري معالجة عملية أخرى، يرجى الانتظار' };
+
+    if (!checkFinancialPermission(currentUser)) {
+      toast.error('ليس لديك صلاحية لحذف السلف');
+      return { success: false, message: 'ليس لديك صلاحية لحذف السلف' };
+    }
+
+    if (!reason?.trim()) {
+      toast.error('سبب الحذف إجباري للمتابعة');
+      return { success: false, message: 'سبب الحذف إجباري للمتابعة' };
+    }
+
+    const adv = advances.find((a) => a.id === advanceId);
+    if (!adv) {
+      toast.error('السلفة غير موجودة أو تم حذفها بالفعل');
+      return { success: false, message: 'السلفة غير موجودة أو تم حذفها بالفعل' };
+    }
+
+    // Verification of financial activity
+    const check = canDeleteAdvance(adv, advanceInstallments, salaryPayments);
+    if (!check.allowed) {
+      toast.error(check.reason || 'لا يمكن حذف هذه السلفة نهائيًا لأنها تحتوي على عمليات مالية سابقة');
+      return { success: false, message: check.reason };
+    }
+
+    try {
+      setIsProcessingCancellation(true);
+      const nowIso = new Date().toISOString();
+      const performedByName = currentUser?.name || currentUser?.email || 'المدير';
+
+      // 1. Record Audit Log before hard delete
+      await addDoc(
+        collection(db, 'audit_logs'),
+        sanitizeForFirestore({
+          tenant_id: tenantId,
+          branch_id: adv.branch_id || branchId || '',
+          action: 'ADVANCE_DELETED',
+          entityType: 'advance',
+          entityId: advanceId,
+          employeeId: adv.employeeId,
+          employeeName: adv.employeeName,
+          amount: adv.amount,
+          reason: reason.trim(),
+          performedBy: performedByName,
+          performedAt: nowIso,
+          previousStatus: adv.status,
+          newStatus: 'deleted',
+          details: `حذف سلفة للموظف ${adv.employeeName} بمبلغ ${adv.amount} ج.م نهائياً لعدم وجود حركات مالية عليها. السبب: ${reason.trim()}`,
+          severity: 'warning',
+          created_at: nowIso,
+        })
+      );
+
+      // 2. Remove any linked unpaid installments
+      const linkedInstallments = advanceInstallments.filter((i) => i.advanceId === advanceId);
+      for (const inst of linkedInstallments) {
+        try {
+          await deleteDoc(doc(db, 'advance_installments', inst.id));
+        } catch (e) {
+          console.warn('Could not delete installment:', inst.id, e);
+        }
+      }
+
+      // 3. Delete the advance document
+      await deleteDoc(doc(db, 'advances', advanceId));
+
+      // 4. Update in-memory states immediately
+      setAdvances((prev) => prev.filter((a) => a.id !== advanceId));
+      setAdvanceInstallments((prev) => prev.filter((i) => i.advanceId !== advanceId));
+
+      toast.success('تم حذف السلفة بنجاح');
+      return { success: true };
+    } catch (err: any) {
+      console.error('Error deleting advance:', err);
+      toast.error('حدث خطأ أثناء حذف السلفة: ' + err.message);
+      return { success: false, message: err.message };
     } finally {
       setIsProcessingCancellation(false);
     }
@@ -844,6 +963,7 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
     voidSalaryPayment,
     createAdvance,
     cancelAdvance,
+    deleteAdvance,
     reverseAdvanceInstallment,
     getKPIs,
   };

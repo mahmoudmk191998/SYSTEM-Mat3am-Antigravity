@@ -105,7 +105,7 @@ export interface AdvanceInstallment {
   payrollId: string;
   period: PayrollPeriod;
   amount: number;
-  status: 'paid' | 'voided';
+  status: 'paid' | 'voided' | 'cancelled';
   voidReason?: string;
   voidedAt?: string;
   voidedBy?: string;
@@ -116,6 +116,7 @@ export interface AdvanceInstallment {
 export type FinancialAuditAction =
   | 'SALARY_PAYMENT_VOIDED'
   | 'ADVANCE_CANCELLED'
+  | 'ADVANCE_DELETED'
   | 'ADVANCE_INSTALLMENT_REVERSED'
   | 'SALARY_PAID'
   | 'ADVANCE_CREATED';

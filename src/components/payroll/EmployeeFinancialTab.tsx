@@ -40,12 +40,14 @@ import {
   Info,
   AlertTriangle,
   FileText,
+  Trash2,
 } from 'lucide-react';
 import type { PayrollRecord, SalaryPayment, Advance, AdvanceInstallment } from '@/types/payroll';
 import { AdvanceModal } from './AdvanceModal';
 import { VoidPaymentModal } from './VoidPaymentModal';
 import { CancelAdvanceModal } from './CancelAdvanceModal';
 import { ReverseInstallmentModal } from './ReverseInstallmentModal';
+import { DeleteAdvanceModal } from './DeleteAdvanceModal';
 
 interface EmployeeFinancialTabProps {
   employee: any;
@@ -55,6 +57,7 @@ interface EmployeeFinancialTabProps {
   installments: AdvanceInstallment[];
   onCreateAdvance: (data: any) => Promise<string | null>;
   onCancelAdvance: (advanceId: string, reason: string) => Promise<boolean>;
+  onDeleteAdvance?: (advanceId: string, reason: string) => Promise<{ success: boolean; message?: string }>;
   onVoidPayment?: (paymentId: string, reason: string) => Promise<boolean>;
   onReverseInstallment?: (installmentId: string, reason: string) => Promise<boolean>;
   isProcessing?: boolean;
@@ -68,6 +71,7 @@ export const EmployeeFinancialTab: React.FC<EmployeeFinancialTabProps> = ({
   installments,
   onCreateAdvance,
   onCancelAdvance,
+  onDeleteAdvance,
   onVoidPayment,
   onReverseInstallment,
   isProcessing = false,
@@ -76,6 +80,7 @@ export const EmployeeFinancialTab: React.FC<EmployeeFinancialTabProps> = ({
   const [statusFilter, setStatusFilter] = useState('all');
 
   // Modal Targets
+  const [deleteAdvanceTarget, setDeleteAdvanceTarget] = useState<Advance | null>(null);
   const [cancelAdvanceTarget, setCancelAdvanceTarget] = useState<Advance | null>(null);
   const [voidPaymentTarget, setVoidPaymentTarget] = useState<SalaryPayment | null>(null);
   const [reverseInstallmentTarget, setReverseInstallmentTarget] = useState<{
@@ -499,13 +504,24 @@ export const EmployeeFinancialTab: React.FC<EmployeeFinancialTabProps> = ({
 
                               {/* 2. Advance Action */}
                               {tx.type === 'advance' && (
-                                <DropdownMenuItem
-                                  onClick={() => setCancelAdvanceTarget(tx.originalItem)}
-                                  className="text-amber-400 focus:text-amber-400 cursor-pointer"
-                                >
-                                  <Ban className="w-3.5 h-3.5 ml-1.5" />
-                                  إلغاء السلفة
-                                </DropdownMenuItem>
+                                <>
+                                  {(tx.originalItem.paidAmount || 0) === 0 && onDeleteAdvance && (
+                                    <DropdownMenuItem
+                                      onClick={() => setDeleteAdvanceTarget(tx.originalItem)}
+                                      className="text-rose-400 focus:text-rose-400 cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5 ml-1.5" />
+                                      حذف السلفة
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem
+                                    onClick={() => setCancelAdvanceTarget(tx.originalItem)}
+                                    className="text-amber-400 focus:text-amber-400 cursor-pointer"
+                                  >
+                                    <Ban className="w-3.5 h-3.5 ml-1.5" />
+                                    إلغاء السلفة
+                                  </DropdownMenuItem>
+                                </>
                               )}
 
                               {/* 3. Installment Action */}
@@ -547,6 +563,18 @@ export const EmployeeFinancialTab: React.FC<EmployeeFinancialTabProps> = ({
         defaultEmployeeId={employee.id}
         onSaveAdvance={onCreateAdvance}
       />
+
+      {/* Delete Advance Modal */}
+      {onDeleteAdvance && (
+        <DeleteAdvanceModal
+          open={!!deleteAdvanceTarget}
+          onOpenChange={(open) => !open && setDeleteAdvanceTarget(null)}
+          advance={deleteAdvanceTarget}
+          onConfirmDelete={onDeleteAdvance}
+          onSwitchToCancel={(adv) => setCancelAdvanceTarget(adv)}
+          isSubmitting={isProcessing}
+        />
+      )}
 
       {/* Cancel Advance Modal */}
       <CancelAdvanceModal

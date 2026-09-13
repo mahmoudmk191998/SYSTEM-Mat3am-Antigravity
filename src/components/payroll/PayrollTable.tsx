@@ -44,6 +44,10 @@ import type { PayrollRecord, PayrollPeriod, SalaryPayment, Advance } from '@/typ
 import { SalaryPaymentModal } from './SalaryPaymentModal';
 import { AdvanceModal } from './AdvanceModal';
 import { VoidPaymentModal } from './VoidPaymentModal';
+import { CancelAdvanceModal } from './CancelAdvanceModal';
+import { DeleteAdvanceModal } from './DeleteAdvanceModal';
+import { ActiveAdvancesTable } from './ActiveAdvancesTable';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 interface PayrollTableProps {
@@ -56,6 +60,8 @@ interface PayrollTableProps {
   onDisbursePayment: (data: any) => Promise<boolean>;
   onVoidPayment: (paymentId: string, reason: string) => Promise<boolean>;
   onCreateAdvance: (data: any) => Promise<string | null>;
+  onDeleteAdvance?: (advanceId: string, reason: string) => Promise<{ success: boolean; message?: string }>;
+  onCancelAdvance?: (advanceId: string, reason: string) => Promise<boolean>;
   isSubmittingPayment: boolean;
 }
 
@@ -81,8 +87,11 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
   onDisbursePayment,
   onVoidPayment,
   onCreateAdvance,
+  onDeleteAdvance,
+  onCancelAdvance,
   isSubmittingPayment,
 }) => {
+  const [payrollSubTab, setPayrollSubTab] = useState<'payroll' | 'advances'>('payroll');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
@@ -91,8 +100,15 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
   const [isAdvanceModalOpen, setIsAdvanceModalOpen] = useState(false);
   const [viewHistoryRecord, setViewHistoryRecord] = useState<PayrollRecord | null>(null);
 
-  // Void Reason prompt state
+  // Void / Cancel / Delete targets
   const [voidPaymentTarget, setVoidPaymentTarget] = useState<SalaryPayment | null>(null);
+  const [deleteAdvanceTarget, setDeleteAdvanceTarget] = useState<Advance | null>(null);
+  const [cancelAdvanceTarget, setCancelAdvanceTarget] = useState<Advance | null>(null);
+
+  // Active advances count
+  const activeAdvancesCount = useMemo(() => {
+    return allAdvances.filter((a) => a.status === 'active' || a.status === 'partially_paid').length;
+  }, [allAdvances]);
 
   // Month & Year parsing
   const [year, month] = currentPeriod.split('-');
@@ -189,104 +205,170 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
   return (
     <Card className="border-slate-800 bg-slate-950/60">
       <CardHeader className="p-4 md:p-6 pb-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        {/* Navigation Sub-Tabs */}
+        <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3 mb-4">
+          <button
+            type="button"
+            onClick={() => setPayrollSubTab('payroll')}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all outline-none",
+              payrollSubTab === 'payroll'
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-slate-200 hover:bg-slate-900"
+            )}
+          >
+            <DollarSign className="w-3.5 h-3.5" />
+            <span>مسير وصرف الرواتب</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPayrollSubTab('advances')}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all outline-none",
+              payrollSubTab === 'advances'
+                ? "bg-amber-500 text-slate-950 shadow-sm"
+                : "text-muted-foreground hover:text-slate-200 hover:bg-slate-900"
+            )}
+          >
+            <HandCoins className="w-3.5 h-3.5" />
+            <span>السلف القائمة والنشطة</span>
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-[10px] px-1.5 py-0 h-4 border",
+                payrollSubTab === 'advances'
+                  ? "border-slate-900/40 bg-black/20 text-slate-950 font-mono"
+                  : "border-amber-500/30 text-amber-400 font-mono"
+              )}
+            >
+              {activeAdvancesCount}
+            </Badge>
+          </button>
+        </div>
+
+        {payrollSubTab === 'payroll' ? (
+          <>
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <CardTitle className="text-lg font-bold flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-primary" />
+                  <span>جدول مسير وصرف الرواتب</span>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  حساب ومتابعة وصرف مرتبات الموظفين مع الخصومات والسلف للشهر المحدد
+                </CardDescription>
+              </div>
+
+              {/* Period & Action Controls */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Month Select */}
+                <Select value={month} onValueChange={handleMonthChange}>
+                  <SelectTrigger className="w-[120px] h-9 text-xs bg-slate-900 border-slate-700">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="01">يناير (01)</SelectItem>
+                    <SelectItem value="02">فبراير (02)</SelectItem>
+                    <SelectItem value="03">مارس (03)</SelectItem>
+                    <SelectItem value="04">أبريل (04)</SelectItem>
+                    <SelectItem value="05">مايو (05)</SelectItem>
+                    <SelectItem value="06">يونيو (06)</SelectItem>
+                    <SelectItem value="07">يوليو (07)</SelectItem>
+                    <SelectItem value="08">أغسطس (08)</SelectItem>
+                    <SelectItem value="09">سبتمبر (09)</SelectItem>
+                    <SelectItem value="10">أكتوبر (10)</SelectItem>
+                    <SelectItem value="11">نوفمبر (11)</SelectItem>
+                    <SelectItem value="12">ديسمبر (12)</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Year Select */}
+                <Select value={year} onValueChange={handleYearChange}>
+                  <SelectTrigger className="w-[95px] h-9 text-xs bg-slate-900 border-slate-700 font-mono">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="2025">2025</SelectItem>
+                    <SelectItem value="2026">2026</SelectItem>
+                    <SelectItem value="2027">2027</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Advance Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAdvanceModalOpen(true)}
+                  className="gap-1.5 text-xs h-9 border-amber-500/30 hover:bg-amber-500/10 text-amber-400"
+                >
+                  <HandCoins className="w-4 h-4" />
+                  <span>إضافة سلفة</span>
+                </Button>
+
+                {/* Export CSV */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportCSV}
+                  className="gap-1.5 text-xs h-9 border-slate-700"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>تصدير CSV</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Filter bar */}
+            <div className="flex flex-col sm:flex-row gap-2.5 pt-4">
+              <div className="relative flex-1">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="بحث باسم الموظف أو المسمى الوظيفي..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pr-9 h-9 text-xs bg-slate-900/80 border-slate-700"
+                />
+              </div>
+
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[140px] h-9 text-xs bg-slate-900/80 border-slate-700">
+                  <SelectValue placeholder="حالة الدفع" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">جميع الحالات</SelectItem>
+                  <SelectItem value="unpaid">لم يتم الدفع</SelectItem>
+                  <SelectItem value="partial">مدفوع جزئياً</SelectItem>
+                  <SelectItem value="paid">مدفوع بالكامل</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        ) : (
           <div>
-            <CardTitle className="text-lg font-bold flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-primary" />
-              <span>جدول مسير وصرف الرواتب</span>
+            <CardTitle className="text-lg font-bold flex items-center gap-2 text-amber-400">
+              <HandCoins className="w-5 h-5" />
+              <span>إدارة السلف القائمة والنشطة</span>
             </CardTitle>
             <CardDescription className="text-xs">
-              حساب ومتابعة وصرف مرتبات الموظفين مع الخصومات والسلف للشهر المحدد
+              متابعة السلف والأقساط المستحقة، وإلغاء أو حذف السلف التي لم تبدأ حركتها المالية
             </CardDescription>
           </div>
-
-          {/* Period & Action Controls */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Month Select */}
-            <Select value={month} onValueChange={handleMonthChange}>
-              <SelectTrigger className="w-[120px] h-9 text-xs bg-slate-900 border-slate-700">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="01">يناير (01)</SelectItem>
-                <SelectItem value="02">فبراير (02)</SelectItem>
-                <SelectItem value="03">مارس (03)</SelectItem>
-                <SelectItem value="04">أبريل (04)</SelectItem>
-                <SelectItem value="05">مايو (05)</SelectItem>
-                <SelectItem value="06">يونيو (06)</SelectItem>
-                <SelectItem value="07">يوليو (07)</SelectItem>
-                <SelectItem value="08">أغسطس (08)</SelectItem>
-                <SelectItem value="09">سبتمبر (09)</SelectItem>
-                <SelectItem value="10">أكتوبر (10)</SelectItem>
-                <SelectItem value="11">نوفمبر (11)</SelectItem>
-                <SelectItem value="12">ديسمبر (12)</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Year Select */}
-            <Select value={year} onValueChange={handleYearChange}>
-              <SelectTrigger className="w-[95px] h-9 text-xs bg-slate-900 border-slate-700 font-mono">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="2025">2025</SelectItem>
-                <SelectItem value="2026">2026</SelectItem>
-                <SelectItem value="2027">2027</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Advance Button */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsAdvanceModalOpen(true)}
-              className="gap-1.5 text-xs h-9 border-amber-500/30 hover:bg-amber-500/10 text-amber-400"
-            >
-              <HandCoins className="w-4 h-4" />
-              <span>إضافة سلفة</span>
-            </Button>
-
-            {/* Export CSV */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportCSV}
-              className="gap-1.5 text-xs h-9 border-slate-700"
-            >
-              <Download className="w-4 h-4" />
-              <span>تصدير CSV</span>
-            </Button>
-          </div>
-        </div>
-
-        {/* Filter bar */}
-        <div className="flex flex-col sm:flex-row gap-2.5 pt-4">
-          <div className="relative flex-1">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="بحث باسم الموظف أو المسمى الوظيفي..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pr-9 h-9 text-xs bg-slate-900/80 border-slate-700"
-            />
-          </div>
-
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[140px] h-9 text-xs bg-slate-900/80 border-slate-700">
-              <SelectValue placeholder="حالة الدفع" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">جميع الحالات</SelectItem>
-              <SelectItem value="unpaid">لم يتم الدفع</SelectItem>
-              <SelectItem value="partial">مدفوع جزئياً</SelectItem>
-              <SelectItem value="paid">مدفوع بالكامل</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        )}
       </CardHeader>
 
-      <CardContent className="p-0">
-        <div className="border-t border-slate-800 overflow-x-auto">
+      <CardContent className={payrollSubTab === 'payroll' ? 'p-0' : 'p-4 md:p-6 pt-0'}>
+        {payrollSubTab === 'advances' ? (
+          <ActiveAdvancesTable
+            advances={allAdvances}
+            employees={employees}
+            onOpenCreateModal={() => setIsAdvanceModalOpen(true)}
+            onRequestDelete={(adv) => setDeleteAdvanceTarget(adv)}
+            onRequestCancel={(adv) => setCancelAdvanceTarget(adv)}
+            isProcessing={isSubmittingPayment}
+          />
+        ) : (
+          <div className="border-t border-slate-800 overflow-x-auto">
           <Table>
             <TableHeader className="bg-slate-900/70">
               <TableRow className="border-slate-800 hover:bg-transparent text-xs">
@@ -496,6 +578,7 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
             )}
           </Table>
         </div>
+        )}
       </CardContent>
 
       {/* Salary Payment Modal */}
@@ -521,6 +604,25 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
         onOpenChange={(open) => !open && setVoidPaymentTarget(null)}
         payment={voidPaymentTarget}
         onConfirmVoid={onVoidPayment}
+        isSubmitting={isSubmittingPayment}
+      />
+
+      {/* Delete Advance Modal */}
+      <DeleteAdvanceModal
+        open={!!deleteAdvanceTarget}
+        onOpenChange={(open) => !open && setDeleteAdvanceTarget(null)}
+        advance={deleteAdvanceTarget}
+        onConfirmDelete={onDeleteAdvance || (async () => ({ success: false, message: 'غير مصرح' }))}
+        onSwitchToCancel={(adv) => setCancelAdvanceTarget(adv)}
+        isSubmitting={isSubmittingPayment}
+      />
+
+      {/* Cancel Advance Modal */}
+      <CancelAdvanceModal
+        open={!!cancelAdvanceTarget}
+        onOpenChange={(open) => !open && setCancelAdvanceTarget(null)}
+        advance={cancelAdvanceTarget}
+        onConfirmCancel={onCancelAdvance || (async () => false)}
         isSubmitting={isSubmittingPayment}
       />
     </Card>

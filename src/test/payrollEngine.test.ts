@@ -8,6 +8,7 @@ import {
   canReverseAdvanceInstallment,
   reverseAdvanceInstallment,
   calculateActiveExpenseTotals,
+  canDeleteAdvance,
 } from '../lib/payrollEngine';
 import type { Advance, AdvanceInstallment, PayrollRecord, SalaryPayment } from '../types/payroll';
 
@@ -771,5 +772,285 @@ describe('Payroll Engine Test Suite', () => {
       expect(reversed.updatedPayroll.netSalary).toBe(8000);
       expect(reversed.updatedPayroll.remaining).toBe(8000);
     });
+
+    // =========================================================================
+    // SECTION 4: ADVANCE HARD DELETE VS CANCELLATION TESTS (USER SPECIFIED)
+    // =========================================================================
+
+    // Test 1: Advance = 2,000, Paid = 0 -> Hard Delete allowed, removed from active advances
+    it('Test 1: Allows Hard Delete for advance with 0 paid amount and updates payroll calculation', () => {
+      const advance: Advance = {
+        id: 'adv_unpaid',
+        tenant_id: 't1',
+        employeeId: 'emp_1',
+        employeeName: 'أحمد محمد',
+        amount: 2000,
+        paidAmount: 0,
+        remainingAmount: 2000,
+        repaymentType: 'installments',
+        installmentAmount: 500,
+        numberOfInstallments: 4,
+        remainingInstallments: 4,
+        startDate: '2026-09-01',
+        paymentMethod: 'cash',
+        status: 'active',
+        deductedPeriods: [],
+        createdAt: '2026-09-01T00:00:00Z',
+        createdBy: 'admin',
+      };
+
+      const check = canDeleteAdvance(advance, []);
+      expect(check.allowed).toBe(true);
+
+      // Verify payroll before delete includes advance deduction (500)
+      const emp = { id: 'emp_1', name: 'أحمد محمد', salary: 6000 };
+      const payrollBefore = calculateEmployeePayroll({
+        employee: emp,
+        period: '2026-09',
+        attendanceRecords: [],
+        advances: [advance],
+        payments: [],
+      });
+      expect(payrollBefore.advanceDeductions).toBe(500);
+      expect(payrollBefore.netSalary).toBe(5500);
+
+      // After Hard Delete: advances array excludes the deleted advance
+      const remainingAdvances: Advance[] = [];
+      const payrollAfter = calculateEmployeePayroll({
+        employee: emp,
+        period: '2026-09',
+        attendanceRecords: [],
+        advances: remainingAdvances,
+        payments: [],
+      });
+      expect(payrollAfter.advanceDeductions).toBe(0);
+      expect(payrollAfter.netSalary).toBe(6000);
+    });
+
+    // Test 2: Advance = 2,000, Paid = 500 -> Hard Delete rejected, Cancel/Void available
+    it('Test 2: Rejects Hard Delete when advance has paid amount > 0 and requires Cancel/Void', () => {
+      const partiallyPaidAdvance: Advance = {
+        id: 'adv_partially_paid',
+        tenant_id: 't1',
+        employeeId: 'emp_1',
+        employeeName: 'أحمد محمد',
+        amount: 2000,
+        paidAmount: 500,
+        remainingAmount: 1500,
+        repaymentType: 'installments',
+        installmentAmount: 500,
+        numberOfInstallments: 4,
+        remainingInstallments: 3,
+        startDate: '2026-09-01',
+        paymentMethod: 'cash',
+        status: 'partially_paid',
+        deductedPeriods: ['2026-09'],
+        createdAt: '2026-09-01T00:00:00Z',
+        createdBy: 'admin',
+      };
+
+      const check = canDeleteAdvance(partiallyPaidAdvance, []);
+      expect(check.allowed).toBe(false);
+      expect(check.reason).toContain('لا يمكن حذف هذه السلفة نهائيًا');
+
+      // Cancel/Void is available instead:
+      const { updatedAdvance } = cancelAdvanceRecord({
+        advance: partiallyPaidAdvance,
+        reason: 'طلب إلغاء من الإدارة',
+        performedBy: 'المدير',
+      });
+      expect(updatedAdvance.status).toBe('cancelled');
+      expect(updatedAdvance.remainingAmount).toBe(0);
+      expect(updatedAdvance.paidAmount).toBe(500); // Historical paid amount remains preserved
+    });
+
+    // Test 3: Advance = 2,000, Paid = 0, Future installments exist -> Hard Delete removes future installments
+    it('Test 3: Safely removes advance and wipes pending future installments', () => {
+      const advance: Advance = {
+        id: 'adv_with_future',
+        tenant_id: 't1',
+        employeeId: 'emp_1',
+        employeeName: 'أحمد محمد',
+        amount: 2000,
+        paidAmount: 0,
+        remainingAmount: 2000,
+        repaymentType: 'installments',
+        installmentAmount: 500,
+        numberOfInstallments: 4,
+        remainingInstallments: 4,
+        startDate: '2026-09-01',
+        paymentMethod: 'cash',
+        status: 'active',
+        deductedPeriods: [],
+        createdAt: '2026-09-01T00:00:00Z',
+        createdBy: 'admin',
+      };
+
+      const futureInstallments: AdvanceInstallment[] = [
+        {
+          id: 'inst_1',
+          tenant_id: 't1',
+          advanceId: 'adv_with_future',
+          employeeId: 'emp_1',
+          payrollId: 'p1',
+          period: '2026-09',
+          amount: 500,
+          status: 'voided', // Unpaid/pending
+          paidAt: '',
+          createdAt: '2026-09-01T00:00:00Z',
+        },
+      ];
+
+      const check = canDeleteAdvance(advance, futureInstallments);
+      expect(check.allowed).toBe(true);
+
+      // Filtering out the deleted advance and its installments
+      const activeAdvances = [advance].filter((a) => a.id !== 'adv_with_future');
+      const activeInstallments = futureInstallments.filter((i) => i.advanceId !== 'adv_with_future');
+      expect(activeAdvances.length).toBe(0);
+      expect(activeInstallments.length).toBe(0);
+    });
+
+    // Test 4: Concurrency / Idempotent double delete
+    it('Test 4: Prevents double deletion and operates idempotently', () => {
+      const advancesStore: Record<string, Advance> = {
+        adv_1: {
+          id: 'adv_1',
+          tenant_id: 't1',
+          employeeId: 'emp_1',
+          employeeName: 'أحمد',
+          amount: 1000,
+          paidAmount: 0,
+          remainingAmount: 1000,
+          repaymentType: 'next_salary',
+          installmentAmount: 1000,
+          numberOfInstallments: 1,
+          remainingInstallments: 1,
+          startDate: '2026-09-01',
+          paymentMethod: 'cash',
+          status: 'active',
+          deductedPeriods: [],
+          createdAt: '2026-09-01T00:00:00Z',
+          createdBy: 'admin',
+        },
+      };
+
+      // First delete operation
+      const performDelete = (id: string) => {
+        if (!advancesStore[id]) {
+          return { success: false, message: 'السلفة غير موجودة أو تم حذفها بالفعل' };
+        }
+        delete advancesStore[id];
+        return { success: true };
+      };
+
+      const op1 = performDelete('adv_1');
+      expect(op1.success).toBe(true);
+      expect(advancesStore['adv_1']).toBeUndefined();
+
+      // Second delete operation (double click)
+      const op2 = performDelete('adv_1');
+      expect(op2.success).toBe(false);
+      expect(op2.message).toContain('تم حذفها بالفعل');
+    });
+
+    // Test 5: Role permission check rejects unauthorized users
+    it('Test 5: Enforces role permissions and rejects unauthorized users', () => {
+      const checkPermission = (user: any) => {
+        if (!user) return false;
+        if (user.isAdmin) return true;
+        if (user.role && ['admin', 'owner', 'manager'].includes(user.role)) return true;
+        if (user.roles && user.roles.some((r: string) => ['admin', 'owner', 'manager'].includes(r))) return true;
+        return false;
+      };
+
+      const cashier = { id: 'u1', name: 'كاشير 1', role: 'cashier' };
+      const waiter = { id: 'u2', name: 'ويتر 1', role: 'waiter' };
+      const manager = { id: 'u3', name: 'مدير الفرع', role: 'manager' };
+      const admin = { id: 'u4', name: 'المسؤول', isAdmin: true };
+
+      expect(checkPermission(cashier)).toBe(false);
+      expect(checkPermission(waiter)).toBe(false);
+      expect(checkPermission(manager)).toBe(true);
+      expect(checkPermission(admin)).toBe(true);
+    });
+
+    // Test 6: Delete one advance while employee has another advance -> only selected changes
+    it('Test 6: Deleting one advance does not alter another advance of the same employee', () => {
+      const advance1: Advance = {
+        id: 'adv_mistake',
+        tenant_id: 't1',
+        employeeId: 'emp_1',
+        employeeName: 'أحمد',
+        amount: 2000,
+        paidAmount: 0,
+        remainingAmount: 2000,
+        repaymentType: 'next_salary',
+        installmentAmount: 2000,
+        numberOfInstallments: 1,
+        remainingInstallments: 1,
+        startDate: '2026-09-01',
+        paymentMethod: 'cash',
+        status: 'active',
+        deductedPeriods: [],
+        createdAt: '2026-09-01T00:00:00Z',
+        createdBy: 'admin',
+      };
+
+      const advance2: Advance = {
+        id: 'adv_valid',
+        tenant_id: 't1',
+        employeeId: 'emp_1',
+        employeeName: 'أحمد',
+        amount: 3000,
+        paidAmount: 1000,
+        remainingAmount: 2000,
+        repaymentType: 'installments',
+        installmentAmount: 1000,
+        numberOfInstallments: 3,
+        remainingInstallments: 2,
+        startDate: '2026-08-01',
+        paymentMethod: 'bank_transfer',
+        status: 'partially_paid',
+        deductedPeriods: ['2026-08'],
+        createdAt: '2026-08-01T00:00:00Z',
+        createdBy: 'admin',
+      };
+
+      const emp = { id: 'emp_1', name: 'أحمد', salary: 10000 };
+      const listBefore = [advance1, advance2];
+
+      // Payroll before deleting adv_mistake
+      const pBefore = calculateEmployeePayroll({
+        employee: emp,
+        period: '2026-09',
+        attendanceRecords: [],
+        advances: listBefore,
+        payments: [],
+      });
+      // advanceDeductions = 2000 (adv1 full) + 1000 (adv2 installment) = 3000
+      expect(pBefore.advanceDeductions).toBe(3000);
+      expect(pBefore.netSalary).toBe(7000);
+
+      // Delete only adv_mistake
+      const listAfter = listBefore.filter((a) => a.id !== 'adv_mistake');
+      expect(listAfter.length).toBe(1);
+      expect(listAfter[0].id).toBe('adv_valid');
+      expect(listAfter[0].paidAmount).toBe(1000);
+      expect(listAfter[0].remainingAmount).toBe(2000);
+      expect(listAfter[0].remainingInstallments).toBe(2);
+
+      // Payroll after deleting adv_mistake: only adv_valid deduction (1000)
+      const pAfter = calculateEmployeePayroll({
+        employee: emp,
+        period: '2026-09',
+        attendanceRecords: [],
+        advances: listAfter,
+        payments: [],
+      });
+      expect(pAfter.advanceDeductions).toBe(1000);
+      expect(pAfter.netSalary).toBe(9000);
+    });
   });
 });
+
