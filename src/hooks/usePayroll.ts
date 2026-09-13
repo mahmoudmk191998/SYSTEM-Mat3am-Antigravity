@@ -32,6 +32,23 @@ import {
 } from '@/lib/payrollEngine';
 import { toast } from 'sonner';
 
+/**
+ * Deeply strips undefined values from an object or array to prevent Firestore
+ * "Unsupported field value: undefined" errors.
+ */
+function sanitizeForFirestore(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(sanitizeForFirestore);
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      result[key] = sanitizeForFirestore(value);
+    }
+  }
+  return result;
+}
+
 export function usePayroll(tenantId: string | null, branchId?: string | null) {
   const [payrolls, setPayrolls] = useState<PayrollRecord[]>([]);
   const [salaryPayments, setSalaryPayments] = useState<SalaryPayment[]>([]);
@@ -168,41 +185,47 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
       }
 
       // 2. Create Salary Payment Document
-      const paymentRef = await addDoc(collection(db, 'salary_payments'), {
-        tenant_id: tenantId,
-        branch_id: branchId || payroll.branch_id || undefined,
-        payrollId: payroll.id,
-        employeeId: payroll.employeeId,
-        employeeName: payroll.employeeName,
-        payrollPeriod: payroll.period,
-        amount: Number(amount),
-        paymentMethod,
-        referenceNumber: referenceNumber?.trim() || '',
-        notes: notes?.trim() || '',
-        idempotencyKey,
-        status: 'completed',
-        createdAt: nowIso,
-        createdBy: currentUser?.name || currentUser?.email || 'المدير',
-      });
+      const paymentRef = await addDoc(
+        collection(db, 'salary_payments'),
+        sanitizeForFirestore({
+          tenant_id: tenantId,
+          branch_id: branchId || payroll.branch_id || '',
+          payrollId: payroll.id,
+          employeeId: payroll.employeeId,
+          employeeName: payroll.employeeName,
+          payrollPeriod: payroll.period,
+          amount: Number(amount),
+          paymentMethod,
+          referenceNumber: referenceNumber?.trim() || '',
+          notes: notes?.trim() || '',
+          idempotencyKey,
+          status: 'completed',
+          createdAt: nowIso,
+          createdBy: currentUser?.name || currentUser?.email || 'المدير',
+        })
+      );
 
       const paymentId = paymentRef.id;
 
       // 3. Create Corresponding Expense Transaction (Category: 'رواتب')
       // Exactly 1 expense record per payment
-      const expenseRef = await addDoc(collection(db, 'expenses'), {
-        tenantId: tenantId,
-        branchId: branchId || payroll.branch_id || undefined,
-        amount: Number(amount),
-        category: 'رواتب',
-        description: `صرف راتب شهر ${payroll.period} للموظف ${payroll.employeeName}${notes ? ' - ' + notes : ''}`,
-        date: todayStr,
-        payment_id: paymentId,
-        reference_id: `salary_payment_${paymentId}`,
-        payroll_period: payroll.period,
-        employee_id: payroll.employeeId,
-        createdBy: currentUser?.uid || 'المدير',
-        createdAt: nowIso,
-      });
+      const expenseRef = await addDoc(
+        collection(db, 'expenses'),
+        sanitizeForFirestore({
+          tenantId: tenantId,
+          branchId: branchId || payroll.branch_id || '',
+          amount: Number(amount),
+          category: 'رواتب',
+          description: `صرف راتب شهر ${payroll.period} للموظف ${payroll.employeeName}${notes ? ' - ' + notes : ''}`,
+          date: todayStr,
+          payment_id: paymentId,
+          reference_id: `salary_payment_${paymentId}`,
+          payroll_period: payroll.period,
+          employee_id: payroll.employeeId,
+          createdBy: currentUser?.uid || 'المدير',
+          createdAt: nowIso,
+        })
+      );
 
       // 4. Link expenseId into salary payment
       await updateDoc(paymentRef, {
@@ -217,13 +240,14 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
       const payrollDocRef = doc(db, 'payrolls', payroll.id);
       await setDoc(
         payrollDocRef,
-        {
+        sanitizeForFirestore({
           ...payroll,
+          branch_id: branchId || payroll.branch_id || '',
           totalPaid: newTotalPaid,
           remaining: newRemaining,
           status: newStatus,
           updatedAt: nowIso,
-        },
+        }),
         { merge: true }
       );
 
@@ -238,43 +262,52 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
           const installment = calculateAdvanceDueInstallment(adv, payroll.period);
           if (installment > 0) {
             // Create Advance Installment Document
-            await addDoc(collection(db, 'advance_installments'), {
-              tenant_id: tenantId,
-              advanceId: adv.id,
-              employeeId: payroll.employeeId,
-              payrollId: payroll.id,
-              period: payroll.period,
-              amount: installment,
-              status: 'paid',
-              paidAt: nowIso,
-              createdAt: nowIso,
-            });
+            await addDoc(
+              collection(db, 'advance_installments'),
+              sanitizeForFirestore({
+                tenant_id: tenantId,
+                advanceId: adv.id,
+                employeeId: payroll.employeeId,
+                payrollId: payroll.id,
+                period: payroll.period,
+                amount: installment,
+                status: 'paid',
+                paidAt: nowIso,
+                createdAt: nowIso,
+              })
+            );
 
             // Update Advance document
             const updatedAdv = applyAdvanceDeduction(adv, payroll.period, installment);
-            await updateDoc(doc(db, 'advances', adv.id), {
-              paidAmount: updatedAdv.paidAmount,
-              remainingAmount: updatedAdv.remainingAmount,
-              remainingInstallments: updatedAdv.remainingInstallments,
-              status: updatedAdv.status,
-              deductedPeriods: updatedAdv.deductedPeriods,
-              updatedAt: nowIso,
-            });
+            await updateDoc(
+              doc(db, 'advances', adv.id),
+              sanitizeForFirestore({
+                paidAmount: updatedAdv.paidAmount,
+                remainingAmount: updatedAdv.remainingAmount,
+                remainingInstallments: updatedAdv.remainingInstallments,
+                status: updatedAdv.status,
+                deductedPeriods: updatedAdv.deductedPeriods,
+                updatedAt: nowIso,
+              })
+            );
           }
         }
       }
 
       // 7. Audit Log
-      await addDoc(collection(db, 'audit_logs'), {
-        tenant_id: tenantId,
-        action: 'salary_paid',
-        entity: 'salary_payment',
-        target_id: paymentId,
-        user: currentUser?.name || currentUser?.email || 'المدير',
-        details: `صرف دفعة راتب للموظف ${payroll.employeeName} بقيمة ${amount} ج.م لشهر ${payroll.period} بطريقة ${paymentMethod}`,
-        severity: 'info',
-        created_at: nowIso,
-      });
+      await addDoc(
+        collection(db, 'audit_logs'),
+        sanitizeForFirestore({
+          tenant_id: tenantId,
+          action: 'salary_paid',
+          entity: 'salary_payment',
+          target_id: paymentId,
+          user: currentUser?.name || currentUser?.email || 'المدير',
+          details: `صرف دفعة راتب للموظف ${payroll.employeeName} بقيمة ${amount} ج.م لشهر ${payroll.period} بطريقة ${paymentMethod}`,
+          severity: 'info',
+          created_at: nowIso,
+        })
+      );
 
       toast.success(`تم صرف الراتب بنجاح: ${amount.toLocaleString('ar-EG')} ج.م للموظف ${payroll.employeeName}`);
       await fetchAllPayrollData();
@@ -316,12 +349,15 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
       const nowIso = new Date().toISOString();
 
       // 1. Mark payment voided
-      await updateDoc(doc(db, 'salary_payments', paymentId), {
-        status: 'voided',
-        voidReason: reason.trim(),
-        voidedAt: nowIso,
-        voidedBy: currentUser?.name || currentUser?.email || 'المدير',
-      });
+      await updateDoc(
+        doc(db, 'salary_payments', paymentId),
+        sanitizeForFirestore({
+          status: 'voided',
+          voidReason: reason.trim(),
+          voidedAt: nowIso,
+          voidedBy: currentUser?.name || currentUser?.email || 'المدير',
+        })
+      );
 
       // 2. Delete or void corresponding expense
       if (payment.expenseId) {
@@ -345,25 +381,31 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
         const newRemaining = Math.max(0, payroll.netSalary - newTotalPaid);
         const newStatus = newTotalPaid === 0 ? 'unpaid' : 'partial';
 
-        await updateDoc(doc(db, 'payrolls', payroll.id), {
-          totalPaid: newTotalPaid,
-          remaining: newRemaining,
-          status: newStatus,
-          updatedAt: nowIso,
-        });
+        await updateDoc(
+          doc(db, 'payrolls', payroll.id),
+          sanitizeForFirestore({
+            totalPaid: newTotalPaid,
+            remaining: newRemaining,
+            status: newStatus,
+            updatedAt: nowIso,
+          })
+        );
       }
 
       // 4. Audit Log
-      await addDoc(collection(db, 'audit_logs'), {
-        tenant_id: tenantId,
-        action: 'salary_payment_voided',
-        entity: 'salary_payment',
-        target_id: paymentId,
-        user: currentUser?.name || currentUser?.email || 'المدير',
-        details: `إلغاء دفعة راتب للموظف ${payment.employeeName} بقيمة ${payment.amount} ج.م لشهر ${payment.payrollPeriod}. السبب: ${reason}`,
-        severity: 'warning',
-        created_at: nowIso,
-      });
+      await addDoc(
+        collection(db, 'audit_logs'),
+        sanitizeForFirestore({
+          tenant_id: tenantId,
+          action: 'salary_payment_voided',
+          entity: 'salary_payment',
+          target_id: paymentId,
+          user: currentUser?.name || currentUser?.email || 'المدير',
+          details: `إلغاء دفعة راتب للموظف ${payment.employeeName} بقيمة ${payment.amount} ج.م لشهر ${payment.payrollPeriod}. السبب: ${reason}`,
+          severity: 'warning',
+          created_at: nowIso,
+        })
+      );
 
       toast.success('تم إلغاء الدفعة وتصحيح المصروف والمسير بنجاح');
       await fetchAllPayrollData();
@@ -401,38 +443,44 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
         ? Math.round((amount / numberOfInstallments) * 100) / 100
         : amount;
 
-      const docRef = await addDoc(collection(db, 'advances'), {
-        tenant_id: tenantId,
-        branch_id: branchId || undefined,
-        employeeId: advanceData.employeeId,
-        employeeName: advanceData.employeeName,
-        amount,
-        paidAmount: 0,
-        remainingAmount: amount,
-        repaymentType: advanceData.repaymentType,
-        installmentAmount,
-        numberOfInstallments,
-        remainingInstallments: numberOfInstallments,
-        startDate: advanceData.startDate,
-        paymentMethod: advanceData.paymentMethod,
-        status: 'active',
-        deductedPeriods: [],
-        notes: advanceData.notes?.trim() || '',
-        createdAt: nowIso,
-        createdBy: advanceData.currentUser?.name || advanceData.currentUser?.email || 'المدير',
-      });
+      const docRef = await addDoc(
+        collection(db, 'advances'),
+        sanitizeForFirestore({
+          tenant_id: tenantId,
+          branch_id: branchId || '',
+          employeeId: advanceData.employeeId,
+          employeeName: advanceData.employeeName,
+          amount,
+          paidAmount: 0,
+          remainingAmount: amount,
+          repaymentType: advanceData.repaymentType,
+          installmentAmount,
+          numberOfInstallments,
+          remainingInstallments: numberOfInstallments,
+          startDate: advanceData.startDate,
+          paymentMethod: advanceData.paymentMethod,
+          status: 'active',
+          deductedPeriods: [],
+          notes: advanceData.notes?.trim() || '',
+          createdAt: nowIso,
+          createdBy: advanceData.currentUser?.name || advanceData.currentUser?.email || 'المدير',
+        })
+      );
 
       // Audit Log
-      await addDoc(collection(db, 'audit_logs'), {
-        tenant_id: tenantId,
-        action: 'advance_created',
-        entity: 'advance',
-        target_id: docRef.id,
-        user: advanceData.currentUser?.name || advanceData.currentUser?.email || 'المدير',
-        details: `إنشاء سلفة جديدة للموظف ${advanceData.employeeName} بمبلغ ${amount} ج.م (${isInstallments ? numberOfInstallments + ' أقساط' : 'خصم كامل'})`,
-        severity: 'info',
-        created_at: nowIso,
-      });
+      await addDoc(
+        collection(db, 'audit_logs'),
+        sanitizeForFirestore({
+          tenant_id: tenantId,
+          action: 'advance_created',
+          entity: 'advance',
+          target_id: docRef.id,
+          user: advanceData.currentUser?.name || advanceData.currentUser?.email || 'المدير',
+          details: `إنشاء سلفة جديدة للموظف ${advanceData.employeeName} بمبلغ ${amount} ج.م (${isInstallments ? numberOfInstallments + ' أقساط' : 'خصم كامل'})`,
+          severity: 'info',
+          created_at: nowIso,
+        })
+      );
 
       toast.success('تم تسجيل السلفة بنجاح');
       await fetchAllPayrollData();

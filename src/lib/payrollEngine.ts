@@ -239,7 +239,7 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
   return {
     id: recordId,
     tenant_id: existingRecord?.tenant_id || '',
-    branch_id: existingRecord?.branch_id,
+    branch_id: existingRecord?.branch_id || '',
     employeeId: employee.id,
     employeeName: employee.name,
     employeeRole: employee.role || '',
@@ -256,7 +256,7 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
     attendanceDeductions,
     attendanceSummary,
     manualDeductions: manualDeductionsAmount,
-    manualDeductionsReason,
+    manualDeductionsReason: manualDeductionsReason || '',
     advanceDeductions,
     netSalary,
     totalPaid,
@@ -264,7 +264,7 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
     status,
     createdAt: existingRecord?.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    createdBy: existingRecord?.createdBy,
+    createdBy: existingRecord?.createdBy || '',
   };
 }
 
