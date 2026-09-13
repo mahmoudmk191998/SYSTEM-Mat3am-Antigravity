@@ -222,32 +222,50 @@ export default function Expenses() {
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [expenses, dateRange, customStartDate, customEndDate, searchQuery, categoryFilter]);
 
-  // Statistics
-  const totalExpenses = filteredAndCategorizedExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+  // Active expenses (Voided expenses are strictly excluded from totals and financial indicators)
+  const activeExpenses = useMemo(() => {
+    return filteredAndCategorizedExpenses.filter((exp) => exp.status !== 'voided');
+  }, [filteredAndCategorizedExpenses]);
 
-  // Category Pie Chart Data
+  // Statistics
+  const totalExpenses = useMemo(() => {
+    return activeExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  }, [activeExpenses]);
+
+  const totalSalaryExpenses = useMemo(() => {
+    return activeExpenses
+      .filter((exp) => exp.category === 'رواتب')
+      .reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  }, [activeExpenses]);
+
+  const totalVoidedExpenses = useMemo(() => {
+    return filteredAndCategorizedExpenses
+      .filter((exp) => exp.status === 'voided')
+      .reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  }, [filteredAndCategorizedExpenses]);
+
+  // Category Pie Chart Data (Calculated strictly from active expenses)
   const categoryData = useMemo(() => {
     const map = new Map<string, number>();
-    filteredAndCategorizedExpenses.forEach(exp => {
-      map.set(exp.category, (map.get(exp.category) || 0) + exp.amount);
+    activeExpenses.forEach((exp) => {
+      map.set(exp.category, (map.get(exp.category) || 0) + Number(exp.amount || 0));
     });
     return Array.from(map.entries())
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value); // Sort descending
-  }, [filteredAndCategorizedExpenses]);
+  }, [activeExpenses]);
 
-  // Daily Trend Bar Chart Data
+  // Daily Trend Bar Chart Data (Calculated strictly from active expenses)
   const timelineData = useMemo(() => {
     const map = new Map<string, number>();
-    filteredAndCategorizedExpenses.forEach(exp => {
+    activeExpenses.forEach((exp) => {
       const d = new Date(exp.date);
-      let dateKey = d.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' });
-      // If single day is selected, maybe show by category instead
-      map.set(dateKey, (map.get(dateKey) || 0) + exp.amount);
+      const dateKey = d.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' });
+      map.set(dateKey, (map.get(dateKey) || 0) + Number(exp.amount || 0));
     });
     const entries = Array.from(map.entries());
     return entries.map(([name, total]) => ({ name, total })).reverse().slice(0, 15).reverse();
-  }, [filteredAndCategorizedExpenses]);
+  }, [activeExpenses]);
 
   const handleExportCSV = () => {
     const headers = ['التاريخ', 'التصنيف', 'البيان', 'المبلغ'].join(',');
@@ -401,18 +419,47 @@ export default function Expenses() {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        filteredAndCategorizedExpenses.map((e) => (
-                          <TableRow key={e.id} className="border-slate-800/60 text-xs">
-                            <TableCell className="font-mono">{e.date}</TableCell>
-                            <TableCell>{e.description}</TableCell>
-                            <TableCell className="text-left font-mono font-bold text-emerald-400">
-                              {e.amount.toLocaleString('ar-EG')} ج.م
-                            </TableCell>
-                            <TableCell className="text-center font-mono text-[10px] text-muted-foreground">
-                              {e.reference_id || e.id.slice(0, 8)}
-                            </TableCell>
-                          </TableRow>
-                        ))
+                        filteredAndCategorizedExpenses.map((e) => {
+                          const isVoided = e.status === 'voided';
+                          return (
+                            <TableRow
+                              key={e.id}
+                              className={`border-slate-800/60 text-xs ${
+                                isVoided ? 'bg-rose-950/15 text-muted-foreground' : ''
+                              }`}
+                            >
+                              <TableCell className="font-mono">{e.date}</TableCell>
+                              <TableCell>
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={isVoided ? 'line-through text-slate-400' : ''}>
+                                      {e.description}
+                                    </span>
+                                    {isVoided && (
+                                      <Badge variant="destructive" className="text-[9px] px-1 py-0 h-4">
+                                        ملغي
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {isVoided && (
+                                    <p className="text-[10px] text-rose-300 italic">
+                                      السبب: {e.voidReason || 'تم الإلغاء'}
+                                      {e.voidedBy ? ` • بواسطة: ${e.voidedBy}` : ''}
+                                    </p>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-left font-mono font-bold">
+                                <span className={isVoided ? 'line-through text-slate-500' : 'text-emerald-400'}>
+                                  {e.amount.toLocaleString('ar-EG')} ج.م
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-center font-mono text-[10px] text-muted-foreground">
+                                {e.reference_id || e.id.slice(0, 8)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
                       )}
                     </TableBody>
                   </Table>
@@ -594,44 +641,78 @@ export default function Expenses() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredAndCategorizedExpenses.map((expense) => (
-                      <TableRow key={expense.id} className="hover:bg-muted/30 transition-colors">
-                        <TableCell className="px-4">
-                          <Checkbox
-                            checked={selectedExpenses.includes(expense.id)}
-                            onCheckedChange={(c) => {
-                              if (c) setSelectedExpenses(prev => [...prev, expense.id]);
-                              else setSelectedExpenses(prev => prev.filter(id => id !== expense.id));
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-medium">{format(new Date(expense.date), 'dd MMMM yyyy', { locale: ar })}</span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="font-normal bg-opacity-20 border-opacity-20 hover:bg-opacity-30 transition-all">
-                            {expense.category}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">{expense.description}</TableCell>
-                        <TableCell className="text-left">
-                          <span className="font-bold text-destructive">{expense.amount.toLocaleString('ar-EG')} ج.م</span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex justify-center items-center gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary transition-colors" onClick={() => setViewingExpense(expense)}>
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary transition-colors" onClick={() => setEditingExpense(expense)}>
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive transition-colors" onClick={() => handleDelete(expense.id)}>
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    filteredAndCategorizedExpenses.map((expense) => {
+                      const isVoided = expense.status === 'voided';
+                      return (
+                        <TableRow
+                          key={expense.id}
+                          className={`hover:bg-muted/30 transition-colors ${
+                            isVoided ? 'bg-rose-950/10 text-muted-foreground' : ''
+                          }`}
+                        >
+                          <TableCell className="px-4">
+                            <Checkbox
+                              checked={selectedExpenses.includes(expense.id)}
+                              onCheckedChange={(c) => {
+                                if (c) setSelectedExpenses(prev => [...prev, expense.id]);
+                                else setSelectedExpenses(prev => prev.filter(id => id !== expense.id));
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-medium">{format(new Date(expense.date), 'dd MMMM yyyy', { locale: ar })}</span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1.5">
+                              <Badge variant="secondary" className="font-normal bg-opacity-20 border-opacity-20 hover:bg-opacity-30 transition-all">
+                                {expense.category}
+                              </Badge>
+                              {isVoided && (
+                                <Badge variant="destructive" className="text-[9px] px-1 py-0 h-4">
+                                  ملغي
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            <div className="space-y-0.5">
+                              <span className={isVoided ? 'line-through text-slate-400' : ''}>
+                                {expense.description}
+                              </span>
+                              {isVoided && expense.voidReason && (
+                                <p className="text-[10px] text-rose-300 italic">
+                                  سبب الإلغاء: {expense.voidReason}
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-left">
+                            <span
+                              className={`font-bold ${
+                                isVoided ? 'line-through text-slate-500' : 'text-destructive'
+                              }`}
+                            >
+                              {expense.amount.toLocaleString('ar-EG')} ج.م
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex justify-center items-center gap-1">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary transition-colors" onClick={() => setViewingExpense(expense)}>
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              {!isVoided && (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary transition-colors" onClick={() => setEditingExpense(expense)}>
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                              )}
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive transition-colors" onClick={() => handleDelete(expense.id)}>
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>

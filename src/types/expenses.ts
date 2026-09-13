@@ -13,6 +13,10 @@ export interface Expense {
   reference_id?: string; // e.g. salary_payment_{paymentId}
   payroll_period?: string; // e.g. '2026-09'
   employee_id?: string; // Connected employee ID
+  status?: 'active' | 'voided';
+  voidReason?: string;
+  voidedAt?: string;
+  voidedBy?: string;
   createdAt: string; // ISO 8601
 }
 

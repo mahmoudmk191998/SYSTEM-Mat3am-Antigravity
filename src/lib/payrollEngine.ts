@@ -3,6 +3,7 @@ import type {
   PayrollPeriod,
   PayrollStatus,
   Advance,
+  AdvanceInstallment,
   SalaryPayment,
   AttendanceSummary,
 } from '@/types/payroll';
@@ -312,4 +313,241 @@ export function applyAdvanceDeduction(advance: Advance, period: PayrollPeriod, i
     status,
     deductedPeriods: [...(advance.deductedPeriods || []), period],
   };
+}
+
+/**
+ * Pure function: Reverses a salary payment and accurately updates the PayrollRecord totals.
+ * Immutably preserves the payment history with status = 'voided'.
+ */
+export function reverseSalaryPaymentInPayroll(options: {
+  payroll: PayrollRecord;
+  payment: SalaryPayment;
+  reason: string;
+  performedBy: string;
+}): { updatedPayroll: PayrollRecord; updatedPayment: SalaryPayment } {
+  const { payroll, payment, reason, performedBy } = options;
+
+  if (payment.status === 'voided') {
+    throw new Error('الدفعة ملغاة مسبقاً (Already Voided)');
+  }
+  if (!reason || !reason.trim()) {
+    throw new Error('سبب الإلغاء إجباري');
+  }
+
+  const nowIso = new Date().toISOString();
+
+  const updatedPayment: SalaryPayment = {
+    ...payment,
+    status: 'voided',
+    voidReason: reason.trim(),
+    voidedAt: nowIso,
+    voidedBy: performedBy,
+  };
+
+  const newTotalPaid = Math.max(0, (payroll.totalPaid || 0) - payment.amount);
+  const newRemaining = Math.max(0, payroll.netSalary - newTotalPaid);
+
+  let newStatus: PayrollStatus = 'unpaid';
+  if (newTotalPaid >= payroll.netSalary && payroll.netSalary > 0) {
+    newStatus = 'paid';
+  } else if (newTotalPaid > 0) {
+    newStatus = 'partial';
+  } else {
+    newStatus = 'unpaid';
+  }
+
+  const updatedPayroll: PayrollRecord = {
+    ...payroll,
+    totalPaid: newTotalPaid,
+    remaining: newRemaining,
+    status: newStatus,
+    updatedAt: nowIso,
+  };
+
+  return { updatedPayroll, updatedPayment };
+}
+
+/**
+ * Pure function: Cancels an advance record.
+ * If uncollected (paidAmount === 0): marks cancelled and zero out remaining amount.
+ * If partially paid: marks cancelled, cancels future installments, retains historical paid installments.
+ */
+export function cancelAdvanceRecord(options: {
+  advance: Advance;
+  reason: string;
+  performedBy: string;
+}): { updatedAdvance: Advance; wasPartiallyPaid: boolean } {
+  const { advance, reason, performedBy } = options;
+
+  if (advance.status === 'cancelled') {
+    throw new Error('السلفة ملغاة مسبقاً (Already Cancelled)');
+  }
+  if (!reason || !reason.trim()) {
+    throw new Error('سبب الإلغاء إجباري');
+  }
+
+  const wasPartiallyPaid = (advance.paidAmount || 0) > 0;
+  const nowIso = new Date().toISOString();
+
+  const updatedAdvance: Advance = {
+    ...advance,
+    status: 'cancelled',
+    remainingAmount: 0,
+    remainingInstallments: 0,
+    cancelReason: reason.trim(),
+    cancelledAt: nowIso,
+    cancelledBy: performedBy,
+    updatedAt: nowIso,
+    notes: `${advance.notes || ''} [تم الإلغاء بواسطة ${performedBy}: ${reason.trim()}]`.trim(),
+  };
+
+  return { updatedAdvance, wasPartiallyPaid };
+}
+
+/**
+ * Pure guard: Checks whether an advance installment can be reversed safely.
+ * If the linked salary payroll has already been paid out, reversal is blocked
+ * until the salary payment itself is reversed first.
+ */
+export function canReverseAdvanceInstallment(
+  installment: AdvanceInstallment,
+  payroll?: PayrollRecord | null
+): { allowed: boolean; reason?: string } {
+  if (installment.status === 'voided') {
+    return { allowed: false, reason: 'القسط ملغي مسبقاً' };
+  }
+
+  if (payroll && (payroll.totalPaid || 0) > 0) {
+    return {
+      allowed: false,
+      reason: 'هذا القسط مرتبط بمرتب تم دفعه بالفعل. يجب أولاً عكس/تعديل دفعة المرتب.',
+    };
+  }
+
+  return { allowed: true };
+}
+
+/**
+ * Pure function: Reverses an advance installment, restoring balance to both Advance and Payroll.
+ */
+export function reverseAdvanceInstallment(options: {
+  installment: AdvanceInstallment;
+  advance: Advance;
+  payroll: PayrollRecord;
+  reason: string;
+  performedBy: string;
+}): {
+  updatedInstallment: AdvanceInstallment;
+  updatedAdvance: Advance;
+  updatedPayroll: PayrollRecord;
+} {
+  const { installment, advance, payroll, reason, performedBy } = options;
+
+  const check = canReverseAdvanceInstallment(installment, payroll);
+  if (!check.allowed) {
+    throw new Error(check.reason || 'لا يمكن عكس هذا القسط');
+  }
+
+  if (!reason || !reason.trim()) {
+    throw new Error('سبب الإلغاء إجباري');
+  }
+
+  const nowIso = new Date().toISOString();
+
+  // 1. Update Installment
+  const updatedInstallment: AdvanceInstallment = {
+    ...installment,
+    status: 'voided',
+    voidReason: reason.trim(),
+    voidedAt: nowIso,
+    voidedBy: performedBy,
+  };
+
+  // 2. Restore Advance
+  const restoredPaidAmount = Math.max(0, (advance.paidAmount || 0) - installment.amount);
+  const restoredRemainingAmount = Math.min(
+    advance.amount,
+    (advance.remainingAmount || 0) + installment.amount
+  );
+  const restoredRemainingInstallments =
+    advance.repaymentType === 'installments'
+      ? (advance.remainingInstallments || 0) + 1
+      : 1;
+  const restoredDeductedPeriods = (advance.deductedPeriods || []).filter(
+    (p) => p !== installment.period
+  );
+  const restoredStatus = restoredPaidAmount > 0 ? 'partially_paid' : 'active';
+
+  const updatedAdvance: Advance = {
+    ...advance,
+    paidAmount: restoredPaidAmount,
+    remainingAmount: restoredRemainingAmount,
+    remainingInstallments: restoredRemainingInstallments,
+    deductedPeriods: restoredDeductedPeriods,
+    status: restoredStatus,
+    updatedAt: nowIso,
+  };
+
+  // 3. Restore Payroll
+  const newAdvanceDeductions = Math.max(
+    0,
+    (payroll.advanceDeductions || 0) - installment.amount
+  );
+  const newNetSalary = Math.max(
+    0,
+    payroll.grossSalary -
+      payroll.attendanceDeductions -
+      payroll.manualDeductions -
+      newAdvanceDeductions
+  );
+  const newRemaining = Math.max(0, newNetSalary - (payroll.totalPaid || 0));
+
+  let newStatus: PayrollStatus = 'unpaid';
+  if ((payroll.totalPaid || 0) >= newNetSalary && newNetSalary > 0) {
+    newStatus = 'paid';
+  } else if ((payroll.totalPaid || 0) > 0) {
+    newStatus = 'partial';
+  } else {
+    newStatus = 'unpaid';
+  }
+
+  const updatedPayroll: PayrollRecord = {
+    ...payroll,
+    advanceDeductions: newAdvanceDeductions,
+    netSalary: newNetSalary,
+    remaining: newRemaining,
+    status: newStatus,
+    updatedAt: nowIso,
+  };
+
+  return { updatedInstallment, updatedAdvance, updatedPayroll };
+}
+
+/**
+ * Pure function: Calculates active vs voided expense statistics
+ */
+export function calculateActiveExpenseTotals(
+  expenses: Array<{ amount: number; status?: string; category?: string }>
+): {
+  totalActive: number;
+  totalVoided: number;
+  salaryExpenses: number;
+} {
+  let totalActive = 0;
+  let totalVoided = 0;
+  let salaryExpenses = 0;
+
+  for (const exp of expenses) {
+    const amt = Number(exp.amount) || 0;
+    if (exp.status === 'voided') {
+      totalVoided += amt;
+    } else {
+      totalActive += amt;
+      if (exp.category === 'رواتب') {
+        salaryExpenses += amt;
+      }
+    }
+  }
+
+  return { totalActive, totalVoided, salaryExpenses };
 }

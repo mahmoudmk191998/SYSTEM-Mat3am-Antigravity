@@ -89,8 +89,12 @@ export interface Advance {
   status: AdvanceStatus;
   deductedPeriods: PayrollPeriod[]; // e.g. ['2026-09', '2026-10'] - prevents duplicate installment deduction
   notes?: string;
+  cancelReason?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
   createdAt: string;
   createdBy: string;
+  updatedAt?: string;
 }
 
 export interface AdvanceInstallment {
@@ -102,8 +106,35 @@ export interface AdvanceInstallment {
   period: PayrollPeriod;
   amount: number;
   status: 'paid' | 'voided';
+  voidReason?: string;
+  voidedAt?: string;
+  voidedBy?: string;
   paidAt: string;
   createdAt: string;
+}
+
+export type FinancialAuditAction =
+  | 'SALARY_PAYMENT_VOIDED'
+  | 'ADVANCE_CANCELLED'
+  | 'ADVANCE_INSTALLMENT_REVERSED'
+  | 'SALARY_PAID'
+  | 'ADVANCE_CREATED';
+
+export interface FinancialAuditLog {
+  action: FinancialAuditAction;
+  entityType: 'salary_payment' | 'advance' | 'advance_installment';
+  entityId: string;
+  employeeId: string;
+  employeeName?: string;
+  amount: number;
+  reason: string;
+  performedBy: string;
+  performedAt: string;
+  previousStatus: string;
+  newStatus: string;
+  tenant_id: string;
+  branch_id?: string;
+  details?: string;
 }
 
 export interface PayrollKPIs {

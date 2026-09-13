@@ -3,8 +3,13 @@ import {
   calculateEmployeePayroll,
   calculateAdvanceDueInstallment,
   applyAdvanceDeduction,
+  reverseSalaryPaymentInPayroll,
+  cancelAdvanceRecord,
+  canReverseAdvanceInstallment,
+  reverseAdvanceInstallment,
+  calculateActiveExpenseTotals,
 } from '../lib/payrollEngine';
-import type { Advance, SalaryPayment } from '../types/payroll';
+import type { Advance, AdvanceInstallment, PayrollRecord, SalaryPayment } from '../types/payroll';
 
 describe('Payroll Engine Test Suite', () => {
   // Scenario 27: Ahmed's Core Scenario
@@ -367,5 +372,404 @@ describe('Payroll Engine Test Suite', () => {
     // Net salary cannot be negative
     expect(payroll.netSalary).toBe(0);
     expect(payroll.remaining).toBe(0);
+  });
+
+  // User Required Financial Reversal Test Scenarios (Tests 1 through 7)
+  describe('Financial Reversal / Void / Cancel Subsystem', () => {
+    // Test 1: Full Salary Payment Void
+    it('Test 1: Salary 8,000, Payment 8,000 -> Void payment -> Paid: 0, Remaining: 8,000, Status: unpaid', () => {
+      const payroll: PayrollRecord = {
+        id: 'payroll_emp1_2026_09',
+        tenant_id: 't1',
+        employeeId: 'emp_1',
+        employeeName: 'محمد أحمد',
+        employeeRole: 'كاشير',
+        period: '2026-09',
+        year: 2026,
+        month: 9,
+        basicSalarySnapshot: 8000,
+        dailyRateSnapshot: 266.67,
+        hourlyRateSnapshot: 33.33,
+        allowances: 0,
+        overtime: 0,
+        bonuses: 0,
+        grossSalary: 8000,
+        attendanceDeductions: 0,
+        attendanceSummary: {
+          attendedDays: 30,
+          absentDays: 0,
+          lateCount: 0,
+          totalLateMinutes: 0,
+          earlyLeaveMinutes: 0,
+          totalHours: 240,
+          deductionReason: '',
+        },
+        manualDeductions: 0,
+        advanceDeductions: 0,
+        netSalary: 8000,
+        totalPaid: 8000,
+        remaining: 0,
+        status: 'paid',
+        createdAt: '2026-09-01T00:00:00Z',
+        updatedAt: '2026-09-01T00:00:00Z',
+      };
+
+      const payment: SalaryPayment = {
+        id: 'pay_full_1',
+        tenant_id: 't1',
+        payrollId: payroll.id,
+        employeeId: 'emp_1',
+        employeeName: 'محمد أحمد',
+        payrollPeriod: '2026-09',
+        amount: 8000,
+        paymentMethod: 'cash',
+        idempotencyKey: 'idemp_pay_full_1',
+        status: 'completed',
+        createdAt: '2026-09-25T10:00:00Z',
+        createdBy: 'admin',
+      };
+
+      const { updatedPayroll, updatedPayment } = reverseSalaryPaymentInPayroll({
+        payroll,
+        payment,
+        reason: 'تم إدخال المبلغ بالخطأ',
+        performedBy: 'المدير العام',
+      });
+
+      expect(updatedPayment.status).toBe('voided');
+      expect(updatedPayment.voidReason).toBe('تم إدخال المبلغ بالخطأ');
+      expect(updatedPayroll.totalPaid).toBe(0);
+      expect(updatedPayroll.remaining).toBe(8000);
+      expect(updatedPayroll.status).toBe('unpaid');
+    });
+
+    // Test 2: Partial Salary Payment Void
+    it('Test 2: Salary 8,000, Payment #1 3,000, Payment #2 5,000 -> Void Payment #1 -> Paid: 5,000, Remaining: 3,000, Status: partial', () => {
+      const payroll: PayrollRecord = {
+        id: 'payroll_emp1_2026_09',
+        tenant_id: 't1',
+        employeeId: 'emp_1',
+        employeeName: 'محمد أحمد',
+        employeeRole: 'كاشير',
+        period: '2026-09',
+        year: 2026,
+        month: 9,
+        basicSalarySnapshot: 8000,
+        dailyRateSnapshot: 266.67,
+        hourlyRateSnapshot: 33.33,
+        allowances: 0,
+        overtime: 0,
+        bonuses: 0,
+        grossSalary: 8000,
+        attendanceDeductions: 0,
+        attendanceSummary: {
+          attendedDays: 30,
+          absentDays: 0,
+          lateCount: 0,
+          totalLateMinutes: 0,
+          earlyLeaveMinutes: 0,
+          totalHours: 240,
+          deductionReason: '',
+        },
+        manualDeductions: 0,
+        advanceDeductions: 0,
+        netSalary: 8000,
+        totalPaid: 8000, // 3,000 + 5,000
+        remaining: 0,
+        status: 'paid',
+        createdAt: '2026-09-01T00:00:00Z',
+        updatedAt: '2026-09-01T00:00:00Z',
+      };
+
+      const payment1: SalaryPayment = {
+        id: 'pay_part_1',
+        tenant_id: 't1',
+        payrollId: payroll.id,
+        employeeId: 'emp_1',
+        employeeName: 'محمد أحمد',
+        payrollPeriod: '2026-09',
+        amount: 3000,
+        paymentMethod: 'cash',
+        idempotencyKey: 'idemp_1',
+        status: 'completed',
+        createdAt: '2026-09-15T10:00:00Z',
+        createdBy: 'admin',
+      };
+
+      const { updatedPayroll, updatedPayment } = reverseSalaryPaymentInPayroll({
+        payroll,
+        payment: payment1,
+        reason: 'إلغاء جزء الدفعة الأولى',
+        performedBy: 'المدير العام',
+      });
+
+      expect(updatedPayment.status).toBe('voided');
+      expect(updatedPayroll.totalPaid).toBe(5000);
+      expect(updatedPayroll.remaining).toBe(3000);
+      expect(updatedPayroll.status).toBe('partial');
+    });
+
+    // Test 3: Cancel Uncollected Advance
+    it('Test 3: Advance 2,000, Paid 0 -> Cancel Advance -> Status: cancelled, Remaining: 0', () => {
+      const advance: Advance = {
+        id: 'adv_unpaid_1',
+        tenant_id: 't1',
+        employeeId: 'emp_1',
+        employeeName: 'سارة',
+        amount: 2000,
+        paidAmount: 0,
+        remainingAmount: 2000,
+        repaymentType: 'installments',
+        installmentAmount: 500,
+        numberOfInstallments: 4,
+        remainingInstallments: 4,
+        startDate: '2026-09-01',
+        paymentMethod: 'cash',
+        status: 'active',
+        deductedPeriods: [],
+        createdAt: '2026-09-01T00:00:00Z',
+        createdBy: 'admin',
+      };
+
+      const { updatedAdvance, wasPartiallyPaid } = cancelAdvanceRecord({
+        advance,
+        reason: 'طلب الموظف إلغاء السلفة قبل الصرف',
+        performedBy: 'المدير',
+      });
+
+      expect(wasPartiallyPaid).toBe(false);
+      expect(updatedAdvance.status).toBe('cancelled');
+      expect(updatedAdvance.remainingAmount).toBe(0);
+      expect(updatedAdvance.remainingInstallments).toBe(0);
+      expect(updatedAdvance.cancelReason).toBe('طلب الموظف إلغاء السلفة قبل الصرف');
+    });
+
+    // Test 4: Cancel Partially Paid Advance
+    it('Test 4: Advance 2,000, Installment 500, Paid installments 500 -> Cancel Advance -> Future cancelled, historical remains, status: cancelled', () => {
+      const advance: Advance = {
+        id: 'adv_partial_1',
+        tenant_id: 't1',
+        employeeId: 'emp_1',
+        employeeName: 'سارة',
+        amount: 2000,
+        paidAmount: 500,
+        remainingAmount: 1500,
+        repaymentType: 'installments',
+        installmentAmount: 500,
+        numberOfInstallments: 4,
+        remainingInstallments: 3,
+        startDate: '2026-09-01',
+        paymentMethod: 'cash',
+        status: 'partially_paid',
+        deductedPeriods: ['2026-09'],
+        createdAt: '2026-09-01T00:00:00Z',
+        createdBy: 'admin',
+      };
+
+      const { updatedAdvance, wasPartiallyPaid } = cancelAdvanceRecord({
+        advance,
+        reason: 'إعفاء الموظف من بقية الأقساط بموافقة الإدارة',
+        performedBy: 'المدير التنفيذي',
+      });
+
+      expect(wasPartiallyPaid).toBe(true);
+      expect(updatedAdvance.status).toBe('cancelled');
+      expect(updatedAdvance.paidAmount).toBe(500); // Historical payment remains!
+      expect(updatedAdvance.remainingAmount).toBe(0); // Future liability stopped!
+      expect(updatedAdvance.remainingInstallments).toBe(0);
+    });
+
+    // Test 5: Double click Cancel (Idempotency)
+    it('Test 5: Double click Cancel -> Rejects duplicate cancellation', () => {
+      const advance: Advance = {
+        id: 'adv_idem_1',
+        tenant_id: 't1',
+        employeeId: 'emp_1',
+        employeeName: 'سارة',
+        amount: 2000,
+        paidAmount: 0,
+        remainingAmount: 2000,
+        repaymentType: 'installments',
+        installmentAmount: 500,
+        numberOfInstallments: 4,
+        remainingInstallments: 4,
+        startDate: '2026-09-01',
+        paymentMethod: 'cash',
+        status: 'active',
+        deductedPeriods: [],
+        createdAt: '2026-09-01T00:00:00Z',
+        createdBy: 'admin',
+      };
+
+      const { updatedAdvance } = cancelAdvanceRecord({
+        advance,
+        reason: 'إلغاء أولي',
+        performedBy: 'المدير',
+      });
+
+      // Second attempt on already cancelled advance
+      expect(() =>
+        cancelAdvanceRecord({
+          advance: updatedAdvance,
+          reason: 'إلغاء مكرر بالخطأ',
+          performedBy: 'المدير',
+        })
+      ).toThrowError('Already Cancelled');
+    });
+
+    // Test 6: Unauthorized user permission check
+    it('Test 6: Unauthorized user attempts cancellation -> Permission denied', () => {
+      const userRoles = ['waiter'];
+      const userPermissions: string[] = ['tables.view'];
+
+      const checkPermission = (roles: string[], perms: string[]) => {
+        const isAuthorized =
+          roles.includes('admin') ||
+          roles.includes('super_admin') ||
+          roles.includes('owner') ||
+          roles.includes('manager') ||
+          perms.includes('*') ||
+          perms.includes('payroll.manage');
+        if (!isAuthorized) {
+          throw new Error('غير مصرح لك بإجراء هذه العملية المالية');
+        }
+        return true;
+      };
+
+      expect(() => checkPermission(userRoles, userPermissions)).toThrowError(
+        'غير مصرح لك بإجراء هذه العملية المالية'
+      );
+
+      // Verify authorized manager succeeds
+      expect(checkPermission(['manager'], [])).toBe(true);
+      expect(checkPermission(['admin'], [])).toBe(true);
+    });
+
+    // Test 7: Voided Salary Payment appears in Expenses and is excluded from active totals
+    it('Test 7: Voided Salary Payment in Expenses is excluded from active totals', () => {
+      const expenses = [
+        { id: 'exp_1', amount: 1500, category: 'مشتريات', status: 'active' },
+        { id: 'exp_2', amount: 8000, category: 'رواتب', status: 'voided' }, // Voided salary payment
+        { id: 'exp_3', amount: 5000, category: 'رواتب', status: 'active' }, // Active salary payment
+      ];
+
+      const { totalActive, totalVoided, salaryExpenses } = calculateActiveExpenseTotals(expenses);
+
+      // Total active must be 1500 + 5000 = 6500 (voided 8000 excluded!)
+      expect(totalActive).toBe(6500);
+      expect(totalVoided).toBe(8000);
+      expect(salaryExpenses).toBe(5000);
+    });
+
+    // Test 8: Installment Reversal Guard (Cannot reverse installment if salary was already paid out)
+    it('Test 8: Prevents reversing advance installment if associated payroll is already paid', () => {
+      const paidPayroll: PayrollRecord = {
+        id: 'payroll_p1',
+        tenant_id: 't1',
+        employeeId: 'emp_1',
+        employeeName: 'علي',
+        employeeRole: 'طباخ',
+        period: '2026-09',
+        year: 2026,
+        month: 9,
+        basicSalarySnapshot: 8000,
+        dailyRateSnapshot: 266.67,
+        hourlyRateSnapshot: 33.33,
+        allowances: 0,
+        overtime: 0,
+        bonuses: 0,
+        grossSalary: 8000,
+        attendanceDeductions: 0,
+        attendanceSummary: {
+          attendedDays: 30,
+          absentDays: 0,
+          lateCount: 0,
+          totalLateMinutes: 0,
+          earlyLeaveMinutes: 0,
+          totalHours: 240,
+          deductionReason: '',
+        },
+        manualDeductions: 0,
+        advanceDeductions: 500,
+        netSalary: 7500,
+        totalPaid: 7500, // Salary of 7,500 was paid out!
+        remaining: 0,
+        status: 'paid',
+        createdAt: '2026-09-01T00:00:00Z',
+        updatedAt: '2026-09-01T00:00:00Z',
+      };
+
+      const installment: AdvanceInstallment = {
+        id: 'inst_1',
+        tenant_id: 't1',
+        advanceId: 'adv_1',
+        employeeId: 'emp_1',
+        payrollId: 'payroll_p1',
+        period: '2026-09',
+        amount: 500,
+        status: 'paid',
+        paidAt: '2026-09-25T10:00:00Z',
+        createdAt: '2026-09-25T10:00:00Z',
+      };
+
+      const advance: Advance = {
+        id: 'adv_1',
+        tenant_id: 't1',
+        employeeId: 'emp_1',
+        employeeName: 'علي',
+        amount: 2000,
+        paidAmount: 500,
+        remainingAmount: 1500,
+        repaymentType: 'installments',
+        installmentAmount: 500,
+        numberOfInstallments: 4,
+        remainingInstallments: 3,
+        startDate: '2026-09-01',
+        paymentMethod: 'cash',
+        status: 'partially_paid',
+        deductedPeriods: ['2026-09'],
+        createdAt: '2026-09-01T00:00:00Z',
+        createdBy: 'admin',
+      };
+
+      // Guard should block reversal
+      const guardResult = canReverseAdvanceInstallment(installment, paidPayroll);
+      expect(guardResult.allowed).toBe(false);
+      expect(guardResult.reason).toContain('هذا القسط مرتبط بمرتب تم دفعه بالفعل');
+
+      expect(() =>
+        reverseAdvanceInstallment({
+          installment,
+          advance,
+          payroll: paidPayroll,
+          reason: 'إلغاء قسط',
+          performedBy: 'المدير',
+        })
+      ).toThrowError(/هذا القسط مرتبط بمرتب تم دفعه بالفعل/);
+
+      // Now if the salary payment was first voided, totalPaid becomes 0:
+      const unpaidPayroll = { ...paidPayroll, totalPaid: 0, remaining: 7500, status: 'unpaid' as const };
+      const allowedResult = canReverseAdvanceInstallment(installment, unpaidPayroll);
+      expect(allowedResult.allowed).toBe(true);
+
+      const reversed = reverseAdvanceInstallment({
+        installment,
+        advance,
+        payroll: unpaidPayroll,
+        reason: 'إلغاء القسط بعد إلغاء الراتب',
+        performedBy: 'المدير',
+      });
+
+      expect(reversed.updatedInstallment.status).toBe('voided');
+      // Advance balance restored
+      expect(reversed.updatedAdvance.paidAmount).toBe(0);
+      expect(reversed.updatedAdvance.remainingAmount).toBe(2000);
+      expect(reversed.updatedAdvance.remainingInstallments).toBe(4);
+      expect(reversed.updatedAdvance.deductedPeriods).toEqual([]);
+      // Payroll deduction removed, net salary restored to 8000
+      expect(reversed.updatedPayroll.advanceDeductions).toBe(0);
+      expect(reversed.updatedPayroll.netSalary).toBe(8000);
+      expect(reversed.updatedPayroll.remaining).toBe(8000);
+    });
   });
 });

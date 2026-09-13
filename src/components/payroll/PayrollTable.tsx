@@ -43,6 +43,7 @@ import {
 import type { PayrollRecord, PayrollPeriod, SalaryPayment, Advance } from '@/types/payroll';
 import { SalaryPaymentModal } from './SalaryPaymentModal';
 import { AdvanceModal } from './AdvanceModal';
+import { VoidPaymentModal } from './VoidPaymentModal';
 import { toast } from 'sonner';
 
 interface PayrollTableProps {
@@ -182,10 +183,7 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
   };
 
   const handleVoidPaymentClick = (payment: SalaryPayment) => {
-    const reason = window.prompt(`يرجى كتابة سبب إلغاء دفعة الراتب بقيمة ${payment.amount} ج.م للموظف ${payment.employeeName}:`);
-    if (reason && reason.trim()) {
-      onVoidPayment(payment.id, reason.trim());
-    }
+    setVoidPaymentTarget(payment);
   };
 
   return (
@@ -314,7 +312,7 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
               ) : (
                 filteredRecords.map((rec) => {
                   const empPayments = allPayments.filter(
-                    (p) => p.employeeId === rec.employeeId && p.payrollPeriod === currentPeriod && p.status === 'completed'
+                    (p) => p.employeeId === rec.employeeId && p.payrollPeriod === currentPeriod
                   );
 
                   return (
@@ -415,35 +413,60 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
                                   <History className="w-3.5 h-3.5" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-56">
+                              <DropdownMenuContent align="end" className="w-64">
                                 <div className="px-2 py-1.5 text-[11px] font-bold text-muted-foreground">
                                   دفعات شهر {currentPeriod} ({empPayments.length})
                                 </div>
                                 <DropdownMenuSeparator />
-                                {empPayments.map((p) => (
-                                  <div
-                                    key={p.id}
-                                    className="px-2 py-1.5 text-xs flex items-center justify-between hover:bg-slate-800/50 rounded"
-                                  >
-                                    <div>
-                                      <p className="font-mono font-bold text-emerald-400">
-                                        {p.amount.toLocaleString('ar-EG')} ج.م
-                                      </p>
-                                      <p className="text-[10px] text-muted-foreground">
-                                        {p.paymentMethod} • {p.createdAt.split('T')[0]}
-                                      </p>
-                                    </div>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => handleVoidPaymentClick(p)}
-                                      className="h-6 w-6 text-muted-foreground hover:text-rose-400"
-                                      title="إلغاء الدفعة"
+                                {empPayments.map((p) => {
+                                  const isVoided = p.status === 'voided';
+                                  return (
+                                    <div
+                                      key={p.id}
+                                      className={`px-2 py-1.5 text-xs flex items-center justify-between rounded ${
+                                        isVoided ? 'bg-rose-950/20 opacity-70' : 'hover:bg-slate-800/50'
+                                      }`}
                                     >
-                                      <RotateCcw className="w-3 h-3" />
-                                    </Button>
-                                  </div>
-                                ))}
+                                      <div className="flex-1 pr-1">
+                                        <div className="flex items-center gap-1.5">
+                                          <p
+                                            className={`font-mono font-bold ${
+                                              isVoided
+                                                ? 'text-rose-400 line-through text-[11px]'
+                                                : 'text-emerald-400'
+                                            }`}
+                                          >
+                                            {p.amount.toLocaleString('ar-EG')} ج.م
+                                          </p>
+                                          {isVoided && (
+                                            <Badge variant="destructive" className="text-[9px] px-1 py-0 h-4">
+                                              ملغي
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <p className="text-[10px] text-muted-foreground">
+                                          {p.paymentMethod} • {p.createdAt.split('T')[0]}
+                                        </p>
+                                        {isVoided && p.voidReason && (
+                                          <p className="text-[9px] text-rose-300 italic truncate max-w-[150px]" title={p.voidReason}>
+                                            سبب: {p.voidReason}
+                                          </p>
+                                        )}
+                                      </div>
+                                      {!isVoided && (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => handleVoidPaymentClick(p)}
+                                          className="h-6 w-6 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10"
+                                          title="إلغاء الدفعة"
+                                        >
+                                          <RotateCcw className="w-3 h-3" />
+                                        </Button>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           )}
@@ -490,6 +513,15 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
         onOpenChange={setIsAdvanceModalOpen}
         employees={employees}
         onSaveAdvance={onCreateAdvance}
+      />
+
+      {/* Void Payment Modal */}
+      <VoidPaymentModal
+        open={!!voidPaymentTarget}
+        onOpenChange={(open) => !open && setVoidPaymentTarget(null)}
+        payment={voidPaymentTarget}
+        onConfirmVoid={onVoidPayment}
+        isSubmitting={isSubmittingPayment}
       />
     </Card>
   );

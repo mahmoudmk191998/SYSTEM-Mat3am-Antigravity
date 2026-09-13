@@ -56,8 +56,9 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
   const [advanceInstallments, setAdvanceInstallments] = useState<AdvanceInstallment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // In-flight payment lock to prevent double-click race conditions
+  // In-flight locks to prevent double-click race conditions
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+  const [isProcessingCancellation, setIsProcessingCancellation] = useState(false);
 
   const fetchAllPayrollData = useCallback(async () => {
     if (!tenantId) {
@@ -322,24 +323,58 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
   };
 
   /**
+   * Helper to verify if the user has permissions to void/cancel financial operations
+   */
+  const checkFinancialPermission = (currentUser?: any): boolean => {
+    if (!currentUser) return true;
+    if (currentUser.isAdmin) return true;
+    if (currentUser.roles && Array.isArray(currentUser.roles)) {
+      if (currentUser.roles.some((r: string) => ['admin', 'super_admin', 'owner', 'manager'].includes(r))) {
+        return true;
+      }
+    }
+    if (currentUser.permissions && Array.isArray(currentUser.permissions)) {
+      if (currentUser.permissions.includes('*') || currentUser.permissions.includes('payroll.manage')) {
+        return true;
+      }
+    }
+    if (currentUser.role && ['admin', 'super_admin', 'owner', 'manager'].includes(currentUser.role)) {
+      return true;
+    }
+    if (currentUser.roles?.length || currentUser.role) {
+      return false;
+    }
+    return true;
+  };
+
+  /**
    * Voids / Cancels a salary payment safely:
-   * - Marks payment voided
-   * - Deletes/voids corresponding expense
-   * - Restores payroll remaining & status
-   * - Adds audit log
+   * - Marks payment voided with mandatory reason and operator
+   * - Sets corresponding expense status = 'voided' (keeps immutable audit history)
+   * - Restores payroll totalPaid, remaining, and status
+   * - Records SALARY_PAYMENT_VOIDED audit log
+   * - Includes double-click idempotency protection
    */
   const voidSalaryPayment = async (
     paymentId: string,
     reason: string,
-    currentUser?: { name?: string; email?: string }
+    currentUser?: any
   ): Promise<boolean> => {
     if (!tenantId) return false;
+    if (isProcessingCancellation) return false;
+
+    if (!checkFinancialPermission(currentUser)) {
+      toast.error('غير مصرح لك بإجراء هذه العملية المالية');
+      return false;
+    }
+
     if (!reason?.trim()) {
       toast.error('يرجى تحديد سبب إلغاء الدفعة');
       return false;
     }
 
     try {
+      setIsProcessingCancellation(true);
       const payment = salaryPayments.find((p) => p.id === paymentId);
       if (!payment || payment.status === 'voided') {
         toast.error('الدفعة غير موجودة أو تم إلغاؤها مسبقاً');
@@ -347,6 +382,7 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
       }
 
       const nowIso = new Date().toISOString();
+      const performedByName = currentUser?.name || currentUser?.email || 'المدير';
 
       // 1. Mark payment voided
       await updateDoc(
@@ -355,23 +391,36 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
           status: 'voided',
           voidReason: reason.trim(),
           voidedAt: nowIso,
-          voidedBy: currentUser?.name || currentUser?.email || 'المدير',
+          voidedBy: performedByName,
         })
       );
 
-      // 2. Delete or void corresponding expense
+      // 2. Void corresponding expense (Do NOT delete doc, retain audit trail!)
+      const expenseVoidData = sanitizeForFirestore({
+        status: 'voided',
+        voidReason: reason.trim(),
+        voidedAt: nowIso,
+        voidedBy: performedByName,
+      });
+
       if (payment.expenseId) {
-        await deleteDoc(doc(db, 'expenses', payment.expenseId)).catch(async () => {
-          // If already removed or not found, search by payment_id
-          const expQ = query(
-            collection(db, 'expenses'),
-            where('payment_id', '==', paymentId)
-          );
-          const expSnap = await getDocs(expQ);
-          for (const d of expSnap.docs) {
-            await deleteDoc(d.ref).catch(() => {});
-          }
-        });
+        await updateDoc(doc(db, 'expenses', payment.expenseId), expenseVoidData).catch(() => {});
+      }
+      // Also search by payment_id and reference_id to ensure complete consistency
+      try {
+        const expQ1 = query(collection(db, 'expenses'), where('payment_id', '==', paymentId));
+        const expSnap1 = await getDocs(expQ1);
+        for (const d of expSnap1.docs) {
+          await updateDoc(d.ref, expenseVoidData).catch(() => {});
+        }
+
+        const expQ2 = query(collection(db, 'expenses'), where('reference_id', '==', `salary_payment_${paymentId}`));
+        const expSnap2 = await getDocs(expQ2);
+        for (const d of expSnap2.docs) {
+          await updateDoc(d.ref, expenseVoidData).catch(() => {});
+        }
+      } catch (e) {
+        console.warn('Could not update all linked expenses by query:', e);
       }
 
       // 3. Update Payroll Record
@@ -379,7 +428,14 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
       if (payroll) {
         const newTotalPaid = Math.max(0, (payroll.totalPaid || 0) - payment.amount);
         const newRemaining = Math.max(0, payroll.netSalary - newTotalPaid);
-        const newStatus = newTotalPaid === 0 ? 'unpaid' : 'partial';
+        let newStatus: 'unpaid' | 'partial' | 'paid' = 'unpaid';
+        if (newTotalPaid >= payroll.netSalary && payroll.netSalary > 0) {
+          newStatus = 'paid';
+        } else if (newTotalPaid > 0) {
+          newStatus = 'partial';
+        } else {
+          newStatus = 'unpaid';
+        }
 
         await updateDoc(
           doc(db, 'payrolls', payroll.id),
@@ -397,23 +453,33 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
         collection(db, 'audit_logs'),
         sanitizeForFirestore({
           tenant_id: tenantId,
-          action: 'salary_payment_voided',
-          entity: 'salary_payment',
-          target_id: paymentId,
-          user: currentUser?.name || currentUser?.email || 'المدير',
+          branch_id: payment.branch_id || branchId || '',
+          action: 'SALARY_PAYMENT_VOIDED',
+          entityType: 'salary_payment',
+          entityId: paymentId,
+          employeeId: payment.employeeId,
+          employeeName: payment.employeeName,
+          amount: payment.amount,
+          reason: reason.trim(),
+          performedBy: performedByName,
+          performedAt: nowIso,
+          previousStatus: 'completed',
+          newStatus: 'voided',
           details: `إلغاء دفعة راتب للموظف ${payment.employeeName} بقيمة ${payment.amount} ج.م لشهر ${payment.payrollPeriod}. السبب: ${reason}`,
           severity: 'warning',
           created_at: nowIso,
         })
       );
 
-      toast.success('تم إلغاء الدفعة وتصحيح المصروف والمسير بنجاح');
+      toast.success('تم إلغاء دفعة الراتب وتحديث المصروف والمسير بنجاح');
       await fetchAllPayrollData();
       return true;
     } catch (err: any) {
       console.error('Error voiding salary payment:', err);
       toast.error('حدث خطأ أثناء إلغاء الدفعة: ' + err.message);
       return false;
+    } finally {
+      setIsProcessingCancellation(false);
     }
   };
 
@@ -493,48 +559,251 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
   };
 
   /**
-   * Cancels an advance
+   * Cancels an advance safely:
+   * - If uncollected (paidAmount === 0): status = 'cancelled', remainingAmount = 0
+   * - If partially paid (paidAmount > 0): status = 'cancelled', halts future installments, retains historical paid installments
+   * - Mandatory reason & operator
+   * - Records ADVANCE_CANCELLED audit log
    */
   const cancelAdvance = async (
     advanceId: string,
     reason: string,
-    currentUser?: { name?: string; email?: string }
+    currentUser?: any
   ): Promise<boolean> => {
     if (!tenantId) return false;
+    if (isProcessingCancellation) return false;
+
+    if (!checkFinancialPermission(currentUser)) {
+      toast.error('غير مصرح لك بإجراء هذه العملية المالية');
+      return false;
+    }
+
+    if (!reason?.trim()) {
+      toast.error('يرجى تحديد سبب إلغاء السلفة');
+      return false;
+    }
 
     try {
+      setIsProcessingCancellation(true);
       const adv = advances.find((a) => a.id === advanceId);
-      if (!adv) {
-        toast.error('السلفة غير موجودة');
+      if (!adv || adv.status === 'cancelled') {
+        toast.error('السلفة غير موجودة أو تم إلغاؤها مسبقاً');
         return false;
       }
 
       const nowIso = new Date().toISOString();
-      await updateDoc(doc(db, 'advances', advanceId), {
-        status: 'cancelled',
-        notes: `${adv.notes || ''} [تم الإلغاء: ${reason}]`,
-        updatedAt: nowIso,
-      });
+      const performedByName = currentUser?.name || currentUser?.email || 'المدير';
+      const wasPartiallyPaid = (adv.paidAmount || 0) > 0;
+
+      await updateDoc(
+        doc(db, 'advances', advanceId),
+        sanitizeForFirestore({
+          status: 'cancelled',
+          remainingAmount: 0,
+          remainingInstallments: 0,
+          cancelReason: reason.trim(),
+          cancelledAt: nowIso,
+          cancelledBy: performedByName,
+          notes: `${adv.notes || ''} [تم الإلغاء بواسطة ${performedByName}: ${reason.trim()}]`.trim(),
+          updatedAt: nowIso,
+        })
+      );
 
       // Audit Log
-      await addDoc(collection(db, 'audit_logs'), {
-        tenant_id: tenantId,
-        action: 'advance_cancelled',
-        entity: 'advance',
-        target_id: advanceId,
-        user: currentUser?.name || currentUser?.email || 'المدير',
-        details: `إلغاء سلفة للموظف ${adv.employeeName} بمبلغ ${adv.amount} ج.م. السبب: ${reason}`,
-        severity: 'warning',
-        created_at: nowIso,
-      });
+      await addDoc(
+        collection(db, 'audit_logs'),
+        sanitizeForFirestore({
+          tenant_id: tenantId,
+          branch_id: adv.branch_id || branchId || '',
+          action: 'ADVANCE_CANCELLED',
+          entityType: 'advance',
+          entityId: advanceId,
+          employeeId: adv.employeeId,
+          employeeName: adv.employeeName,
+          amount: adv.amount,
+          reason: reason.trim(),
+          performedBy: performedByName,
+          performedAt: nowIso,
+          previousStatus: adv.status,
+          newStatus: 'cancelled',
+          details: `إلغاء سلفة للموظف ${adv.employeeName} بمبلغ ${adv.amount} ج.م (المسدد منها: ${adv.paidAmount} ج.م). السبب: ${reason}`,
+          severity: 'warning',
+          created_at: nowIso,
+        })
+      );
 
-      toast.success('تم إلغاء السلفة بنجاح');
+      toast.success(
+        wasPartiallyPaid
+          ? 'تم إلغاء السلفة وإيقاف الأقساط المستقبلية مع الاحتفاظ بالسجل المالي'
+          : 'تم إلغاء السلفة بنجاح'
+      );
       await fetchAllPayrollData();
       return true;
     } catch (err: any) {
       console.error('Error cancelling advance:', err);
       toast.error('خطأ أثناء إلغاء السلفة: ' + err.message);
       return false;
+    } finally {
+      setIsProcessingCancellation(false);
+    }
+  };
+
+  /**
+   * Safely reverses an advance installment that was deducted from a payroll:
+   * - Guard: If the payroll was already paid (totalPaid > 0), BLOCKS reversal and warns the user:
+   *   "هذا القسط مرتبط بمرتب تم دفعه بالفعل. يجب أولاً عكس/تعديل دفعة المرتب."
+   * - If allowed:
+   *   - Marks installment status = 'voided'
+   *   - Restores advance balance (paidAmount decreased, remainingAmount increased, period removed from deductedPeriods)
+   *   - Restores payroll balance (advanceDeductions decreased, netSalary & remaining recalculated)
+   *   - Records ADVANCE_INSTALLMENT_REVERSED audit log
+   */
+  const reverseAdvanceInstallment = async (
+    installmentId: string,
+    reason: string,
+    currentUser?: any
+  ): Promise<boolean> => {
+    if (!tenantId) return false;
+    if (isProcessingCancellation) return false;
+
+    if (!checkFinancialPermission(currentUser)) {
+      toast.error('غير مصرح لك بإجراء هذه العملية المالية');
+      return false;
+    }
+
+    if (!reason?.trim()) {
+      toast.error('يرجى تحديد سبب إلغاء القسط');
+      return false;
+    }
+
+    try {
+      setIsProcessingCancellation(true);
+      const installment = advanceInstallments.find((i) => i.id === installmentId);
+      if (!installment || installment.status === 'voided') {
+        toast.error('القسط غير موجود أو تم إلغاؤه مسبقاً');
+        return false;
+      }
+
+      const payroll = payrolls.find((p) => p.id === installment.payrollId);
+      const advance = advances.find((a) => a.id === installment.advanceId);
+      if (!advance) {
+        toast.error('بيانات السلفة المرتبطة غير موجودة');
+        return false;
+      }
+
+      // Guard: if salary was already paid, block reversal!
+      if (payroll && (payroll.totalPaid || 0) > 0) {
+        toast.error('هذا القسط مرتبط بمرتب تم دفعه بالفعل. يجب أولاً عكس/تعديل دفعة المرتب.');
+        return false;
+      }
+
+      const nowIso = new Date().toISOString();
+      const performedByName = currentUser?.name || currentUser?.email || 'المدير';
+
+      // 1. Mark installment voided
+      await updateDoc(
+        doc(db, 'advance_installments', installmentId),
+        sanitizeForFirestore({
+          status: 'voided',
+          voidReason: reason.trim(),
+          voidedAt: nowIso,
+          voidedBy: performedByName,
+        })
+      );
+
+      // 2. Restore Advance balance
+      const restoredPaidAmount = Math.max(0, (advance.paidAmount || 0) - installment.amount);
+      const restoredRemainingAmount = Math.min(
+        advance.amount,
+        (advance.remainingAmount || 0) + installment.amount
+      );
+      const restoredRemainingInstallments =
+        advance.repaymentType === 'installments'
+          ? (advance.remainingInstallments || 0) + 1
+          : 1;
+      const restoredDeductedPeriods = (advance.deductedPeriods || []).filter(
+        (p) => p !== installment.period
+      );
+      const restoredStatus = restoredPaidAmount > 0 ? 'partially_paid' : 'active';
+
+      await updateDoc(
+        doc(db, 'advances', advance.id),
+        sanitizeForFirestore({
+          paidAmount: restoredPaidAmount,
+          remainingAmount: restoredRemainingAmount,
+          remainingInstallments: restoredRemainingInstallments,
+          deductedPeriods: restoredDeductedPeriods,
+          status: restoredStatus,
+          updatedAt: nowIso,
+        })
+      );
+
+      // 3. Restore Payroll balance if exists
+      if (payroll) {
+        const newAdvanceDeductions = Math.max(
+          0,
+          (payroll.advanceDeductions || 0) - installment.amount
+        );
+        const newNetSalary = Math.max(
+          0,
+          payroll.grossSalary -
+            payroll.attendanceDeductions -
+            payroll.manualDeductions -
+            newAdvanceDeductions
+        );
+        const newRemaining = Math.max(0, newNetSalary - (payroll.totalPaid || 0));
+        let newStatus: 'unpaid' | 'partial' | 'paid' = 'unpaid';
+        if ((payroll.totalPaid || 0) >= newNetSalary && newNetSalary > 0) {
+          newStatus = 'paid';
+        } else if ((payroll.totalPaid || 0) > 0) {
+          newStatus = 'partial';
+        } else {
+          newStatus = 'unpaid';
+        }
+
+        await updateDoc(
+          doc(db, 'payrolls', payroll.id),
+          sanitizeForFirestore({
+            advanceDeductions: newAdvanceDeductions,
+            netSalary: newNetSalary,
+            remaining: newRemaining,
+            status: newStatus,
+            updatedAt: nowIso,
+          })
+        );
+      }
+
+      // 4. Audit Log
+      await addDoc(
+        collection(db, 'audit_logs'),
+        sanitizeForFirestore({
+          tenant_id: tenantId,
+          branch_id: advance.branch_id || branchId || '',
+          action: 'ADVANCE_INSTALLMENT_REVERSED',
+          entityType: 'advance_installment',
+          entityId: installmentId,
+          employeeId: installment.employeeId,
+          amount: installment.amount,
+          reason: reason.trim(),
+          performedBy: performedByName,
+          performedAt: nowIso,
+          previousStatus: 'paid',
+          newStatus: 'voided',
+          details: `عكس قسط سلفة بقيمة ${installment.amount} ج.م لشهر ${installment.period}. السبب: ${reason}`,
+          severity: 'warning',
+          created_at: nowIso,
+        })
+      );
+
+      toast.success('تم إلغاء قسط السلفة واستعادة الرصيد للمسير والسلفة بنجاح');
+      await fetchAllPayrollData();
+      return true;
+    } catch (err: any) {
+      console.error('Error reversing installment:', err);
+      toast.error('حدث خطأ أثناء عكس القسط: ' + err.message);
+      return false;
+    } finally {
+      setIsProcessingCancellation(false);
     }
   };
 
@@ -568,12 +837,14 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
     advanceInstallments,
     loading,
     isSubmittingPayment,
+    isProcessingCancellation,
     fetchAllPayrollData,
     getPayrollForPeriod,
     disburseSalaryPayment,
     voidSalaryPayment,
     createAdvance,
     cancelAdvance,
+    reverseAdvanceInstallment,
     getKPIs,
   };
 }
