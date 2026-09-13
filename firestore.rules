@@ -104,6 +104,20 @@ service cloud.firestore {
       allow delete: if isAuthenticated();
     }
 
+    // HR Payroll, Advances, and Salary Payments (Strictly Authenticated Staff/Managers)
+    match /payrolls/{payrollId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /salary_payments/{paymentId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /advances/{advanceId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /advance_installments/{installmentId} {
+      allow read, write: if isAuthenticated();
+    }
+
     // Audit Logs (Authenticated read; creation allowed for audit trail; no deletion)
     match /audit_logs/{logId} {
       allow read: if isAuthenticated();

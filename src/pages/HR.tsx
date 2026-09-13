@@ -32,6 +32,10 @@ import {
 } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useHR, useTenantBranch } from '@/hooks/useDatabase';
+import { usePayroll } from '@/hooks/usePayroll';
+import { PayrollOverviewCards } from '@/components/payroll/PayrollOverviewCards';
+import { PayrollTable } from '@/components/payroll/PayrollTable';
+import { EmployeeFinancialTab } from '@/components/payroll/EmployeeFinancialTab';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { formatWorkedHours, calculateLateMinutes, timeStringToMinutes } from '@/lib/attendanceSecurity';
@@ -78,6 +82,26 @@ export default function HR() {
     updateHrSettings,
     rotateQrToken,
   } = useHR(tenantId);
+
+  const {
+    payrolls,
+    salaryPayments,
+    advances,
+    advanceInstallments,
+    isSubmittingPayment,
+    getPayrollForPeriod,
+    disburseSalaryPayment,
+    voidSalaryPayment,
+    createAdvance,
+    cancelAdvance,
+    getKPIs,
+  } = usePayroll(tenantId, branchId);
+
+  const [payrollPeriod, setPayrollPeriod] = useState<string>(() => {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    return `${d.getFullYear()}-${m}`;
+  });
 
   const { currency, number } = useFormatters();
 
@@ -1456,99 +1480,20 @@ export default function HR() {
         {/* ========================================================================= */}
         {/* TAB 5: REPORTS & PAYROLL INTEGRATION                                      */}
         {/* ========================================================================= */}
-        <TabsContent value="reports" className="space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base">تقارير الحضور وحساب مسير الرواتب</CardTitle>
-                  <CardDescription className="text-xs">
-                    حساب ساعات العمل والتأخير والخصومات التقديرية بناءً على الحضور
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex items-center gap-1 text-xs">
-                    <Label className="text-xs">من:</Label>
-                    <Input
-                      type="date"
-                      value={reportDateFrom}
-                      onChange={(e) => setReportDateFrom(e.target.value)}
-                      className="h-8 w-auto text-xs"
-                    />
-                  </div>
-                  <div className="flex items-center gap-1 text-xs">
-                    <Label className="text-xs">إلى:</Label>
-                    <Input
-                      type="date"
-                      value={reportDateTo}
-                      onChange={(e) => setReportDateTo(e.target.value)}
-                      className="h-8 w-auto text-xs"
-                    />
-                  </div>
-                  <Button onClick={handleExportCSV} variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
-                    <Download className="w-3.5 h-3.5" />
-                    تصدير CSV
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>الموظف</TableHead>
-                      <TableHead>الراتب الأساسي</TableHead>
-                      <TableHead>أيام الحضور</TableHead>
-                      <TableHead>مرات التأخير</TableHead>
-                      <TableHead>دقائق التأخير</TableHead>
-                      <TableHead>إجمالي الساعات</TableHead>
-                      {hrSettings.late_deduction_enabled && <TableHead>خصم التأخير</TableHead>}
-                      {hrSettings.overtime_enabled && <TableHead>الإضافي</TableHead>}
-                      <TableHead className="text-left">الصافي التقديري</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {payrollReportData.map((row) => (
-                      <TableRow key={row.id}>
-                        <TableCell>
-                          <p className="font-bold text-sm text-slate-100">{row.name}</p>
-                          <p className="text-[11px] text-muted-foreground">{row.role}</p>
-                        </TableCell>
-                        <TableCell className="font-bold text-xs">{currency(row.salary)}</TableCell>
-                        <TableCell className="text-xs">{row.attendedDays} يوم</TableCell>
-                        <TableCell className="text-xs">{row.lateDays}</TableCell>
-                        <TableCell className="text-xs">
-                          {row.totalLateMinutes > 0 ? `${row.totalLateMinutes} دقيقة` : '-'}
-                        </TableCell>
-                        <TableCell className="text-xs font-bold text-primary">{row.totalHours} س</TableCell>
-                        {hrSettings.late_deduction_enabled && (
-                          <TableCell className="text-xs text-rose-400 font-bold">
-                            {row.lateDeductions > 0 ? `-${currency(row.lateDeductions)}` : '0'}
-                          </TableCell>
-                        )}
-                        {hrSettings.overtime_enabled && (
-                          <TableCell className="text-xs text-emerald-400 font-bold">
-                            {row.overtimeBonus > 0 ? `+${currency(row.overtimeBonus)}` : '0'}
-                          </TableCell>
-                        )}
-                        <TableCell className="text-left font-bold text-emerald-400 text-sm">
-                          {currency(row.estimatedNet)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {payrollReportData.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                          لا توجد بيانات للفترة المحددة
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="reports" className="space-y-6">
+          <PayrollOverviewCards kpis={getKPIs(getPayrollForPeriod(payrollPeriod, employees, attendance, hrSettings))} />
+          <PayrollTable
+            periodRecords={getPayrollForPeriod(payrollPeriod, employees, attendance, hrSettings)}
+            allPayments={salaryPayments}
+            allAdvances={advances}
+            employees={employees}
+            currentPeriod={payrollPeriod}
+            onPeriodChange={setPayrollPeriod}
+            onDisbursePayment={disburseSalaryPayment}
+            onVoidPayment={voidSalaryPayment}
+            onCreateAdvance={createAdvance}
+            isSubmittingPayment={isSubmittingPayment}
+          />
         </TabsContent>
 
         {/* ========================================================================= */}
@@ -2003,92 +1948,118 @@ export default function HR() {
 
           {profileEmployee && (
             <div className="space-y-4 py-2">
-              {/* Profile Stats Cards */}
-              {(() => {
-                const empRecords = attendance.filter((a) => a.employeeId === profileEmployee.id);
-                const attended = empRecords.filter((a) => a.status === 'present' || a.status === 'late').length;
-                const late = empRecords.filter((a) => a.status === 'late').length;
-                const lateMins = empRecords.reduce((s, a) => s + a.lateMinutes, 0);
-                const totalHours = empRecords.reduce((s, a) => s + a.hours, 0);
+              <Tabs defaultValue="financial" className="w-full">
+                <TabsList className="grid grid-cols-2 bg-slate-900 border border-slate-800 mb-3">
+                  <TabsTrigger value="financial" className="text-xs font-bold">
+                    البيانات المالية والسلف
+                  </TabsTrigger>
+                  <TabsTrigger value="attendance" className="text-xs font-bold">
+                    سجل الحضور والغياب
+                  </TabsTrigger>
+                </TabsList>
 
-                return (
-                  <>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
-                        <p className="text-lg font-bold text-emerald-400">{attended} يوم</p>
-                        <p className="text-[10px] text-muted-foreground">أيام الحضور</p>
-                      </div>
-                      <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
-                        <p className="text-lg font-bold text-amber-400">{late} مرة</p>
-                        <p className="text-[10px] text-muted-foreground">مرات التأخير</p>
-                      </div>
-                      <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
-                        <p className="text-lg font-bold text-amber-400">{lateMins} د</p>
-                        <p className="text-[10px] text-muted-foreground">إجمالي التأخير</p>
-                      </div>
-                      <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
-                        <p className="text-lg font-bold text-primary">{Math.round(totalHours * 10) / 10} س</p>
-                        <p className="text-[10px] text-muted-foreground">ساعات العمل</p>
-                      </div>
-                    </div>
+                {/* TAB 1: FINANCIAL & ADVANCES */}
+                <TabsContent value="financial" className="space-y-3">
+                  <EmployeeFinancialTab
+                    employee={profileEmployee}
+                    payrolls={payrolls}
+                    payments={salaryPayments}
+                    advances={advances}
+                    installments={advanceInstallments}
+                    onCreateAdvance={createAdvance}
+                    onCancelAdvance={cancelAdvance}
+                  />
+                </TabsContent>
 
-                    <div className="space-y-2 pt-2">
-                      <h4 className="text-xs font-bold text-slate-300">سجل الحضور التاريخي للموظف</h4>
-                      <div className="max-h-60 overflow-y-auto rounded-lg border">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>التاريخ</TableHead>
-                              <TableHead>الحضور</TableHead>
-                              <TableHead>الانصراف</TableHead>
-                              <TableHead>الساعات</TableHead>
-                              <TableHead>التأخير</TableHead>
-                              <TableHead>الحالة</TableHead>
-                              <TableHead className="text-left">حذف</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {empRecords.map((r) => (
-                              <TableRow key={r.id}>
-                                <TableCell className="font-mono text-xs">{r.date}</TableCell>
-                                <TableCell className="font-mono text-xs">{r.checkIn || '-'}</TableCell>
-                                <TableCell className="font-mono text-xs">{r.checkOut || '-'}</TableCell>
-                                <TableCell className="text-xs">{r.hours > 0 ? `${r.hours} س` : '-'}</TableCell>
-                                <TableCell className="text-xs">
-                                  {r.lateMinutes > 0 ? `${r.lateMinutes} د` : '-'}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge className={cn('text-[9px] border', statusColors[r.status])}>
-                                    {statusLabels[r.status] || r.status}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-left">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => setDeleteAttendanceRecord(r)}
-                                    className="h-7 w-7 text-muted-foreground hover:text-rose-400"
-                                    title="حذف سجل الحضور"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                            {empRecords.length === 0 && (
-                              <TableRow>
-                                <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
-                                  لا توجد سجلات حضور لهذا الموظف حتى الآن
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
-                  </>
-                );
-              })()}
+                {/* TAB 2: ATTENDANCE HISTORY */}
+                <TabsContent value="attendance" className="space-y-3">
+                  {(() => {
+                    const empRecords = attendance.filter((a) => a.employeeId === profileEmployee.id);
+                    const attended = empRecords.filter((a) => a.status === 'present' || a.status === 'late').length;
+                    const late = empRecords.filter((a) => a.status === 'late').length;
+                    const lateMins = empRecords.reduce((s, a) => s + a.lateMinutes, 0);
+                    const totalHours = empRecords.reduce((s, a) => s + a.hours, 0);
+
+                    return (
+                      <>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
+                            <p className="text-lg font-bold text-emerald-400">{attended} يوم</p>
+                            <p className="text-[10px] text-muted-foreground">أيام الحضور</p>
+                          </div>
+                          <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
+                            <p className="text-lg font-bold text-amber-400">{late} مرة</p>
+                            <p className="text-[10px] text-muted-foreground">مرات التأخير</p>
+                          </div>
+                          <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
+                            <p className="text-lg font-bold text-amber-400">{lateMins} د</p>
+                            <p className="text-[10px] text-muted-foreground">إجمالي التأخير</p>
+                          </div>
+                          <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
+                            <p className="text-lg font-bold text-primary">{Math.round(totalHours * 10) / 10} س</p>
+                            <p className="text-[10px] text-muted-foreground">ساعات العمل</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 pt-2">
+                          <h4 className="text-xs font-bold text-slate-300">سجل الحضور التاريخي للموظف</h4>
+                          <div className="max-h-60 overflow-y-auto rounded-lg border">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>التاريخ</TableHead>
+                                  <TableHead>الحضور</TableHead>
+                                  <TableHead>الانصراف</TableHead>
+                                  <TableHead>الساعات</TableHead>
+                                  <TableHead>التأخير</TableHead>
+                                  <TableHead>الحالة</TableHead>
+                                  <TableHead className="text-left">حذف</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {empRecords.map((r) => (
+                                  <TableRow key={r.id}>
+                                    <TableCell className="font-mono text-xs">{r.date}</TableCell>
+                                    <TableCell className="font-mono text-xs">{r.checkIn || '-'}</TableCell>
+                                    <TableCell className="font-mono text-xs">{r.checkOut || '-'}</TableCell>
+                                    <TableCell className="text-xs">{r.hours > 0 ? `${r.hours} س` : '-'}</TableCell>
+                                    <TableCell className="text-xs">
+                                      {r.lateMinutes > 0 ? `${r.lateMinutes} د` : '-'}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge className={cn('text-[9px] border', statusColors[r.status])}>
+                                        {statusLabels[r.status] || r.status}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-left">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => setDeleteAttendanceRecord(r)}
+                                        className="h-7 w-7 text-muted-foreground hover:text-rose-400"
+                                        title="حذف سجل الحضور"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                                {empRecords.length === 0 && (
+                                  <TableRow>
+                                    <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
+                                      لا توجد سجلات حضور لهذا الموظف حتى الآن
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </TabsContent>
+              </Tabs>
             </div>
           )}
         </DialogContent>

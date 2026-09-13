@@ -9,5 +9,10 @@ export interface Expense {
   createdBy: string; // User ID
   branchId?: string; // Tenant/Branch ID
   shift_id?: string; // Connected Shift ID
+  payment_id?: string; // Reference to salary_payment ID
+  reference_id?: string; // e.g. salary_payment_{paymentId}
+  payroll_period?: string; // e.g. '2026-09'
+  employee_id?: string; // Connected employee ID
   createdAt: string; // ISO 8601
 }
+

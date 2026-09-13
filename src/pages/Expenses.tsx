@@ -21,10 +21,13 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Receipt, Search, FileText, Download, Edit, Trash2, Printer, PieChart as PieChartIcon, Target, Eye, CalendarDays, Tag, Hash, AlignRight } from 'lucide-react';
+import { Plus, Receipt, Search, FileText, Download, Edit, Trash2, Printer, PieChart as PieChartIcon, Target, Eye, CalendarDays, Tag, Hash, AlignRight, DollarSign } from 'lucide-react';
 import { AddExpenseDialog } from '@/components/expenses/AddExpenseDialog';
 import { getExpenses, updateExpense, deleteExpense } from '@/services/expenses';
-import { useTenantBranch } from '@/hooks/useDatabase';
+import { useTenantBranch, useHR } from '@/hooks/useDatabase';
+import { usePayroll } from '@/hooks/usePayroll';
+import { PayrollOverviewCards } from '@/components/payroll/PayrollOverviewCards';
+import { PayrollTable } from '@/components/payroll/PayrollTable';
 import type { Expense, ExpenseCategory } from '@/types/expenses';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -47,6 +50,34 @@ export default function Expenses() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+
+  // HR & Payroll Integration
+  const { employees, attendance, hrSettings } = useHR(tenantId);
+  const {
+    payrolls,
+    salaryPayments,
+    advances,
+    isSubmittingPayment,
+    getPayrollForPeriod,
+    disburseSalaryPayment,
+    voidSalaryPayment,
+    createAdvance,
+    getKPIs,
+  } = usePayroll(tenantId, branchId);
+
+  const [payrollPeriod, setPayrollPeriod] = useState<string>(() => {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    return `${d.getFullYear()}-${m}`;
+  });
+
+  const periodPayrollRecords = useMemo(() => {
+    return getPayrollForPeriod(payrollPeriod, employees, attendance, hrSettings);
+  }, [payrollPeriod, employees, attendance, hrSettings, getPayrollForPeriod]);
+
+  const payrollKPIs = useMemo(() => {
+    return getKPIs(periodPayrollRecords);
+  }, [getKPIs, periodPayrollRecords]);
   
   // Date Filtering State
   const [dateRange, setDateRange] = useState('month');
@@ -295,9 +326,105 @@ export default function Expenses() {
     >
       <div className="space-y-6">
 
-        {/* Top Summary Cards */}
-        <div className="grid gap-4 md:grid-cols-3">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+        {/* View Mode Toggle Bar */}
+        <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+          <Button
+            variant={categoryFilter !== 'رواتب' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setCategoryFilter('all')}
+            className="text-xs h-8"
+          >
+            كافة المصروفات التشغيلية
+          </Button>
+          <Button
+            variant={categoryFilter === 'رواتب' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setCategoryFilter('رواتب')}
+            className="text-xs h-8 gap-1.5"
+          >
+            <DollarSign className="w-3.5 h-3.5" />
+            رواتب ومسير الأجور
+          </Button>
+        </div>
+
+        {categoryFilter === 'رواتب' ? (
+          <div className="space-y-6">
+            <PayrollOverviewCards kpis={payrollKPIs} />
+            <PayrollTable
+              periodRecords={periodPayrollRecords}
+              allPayments={salaryPayments}
+              allAdvances={advances}
+              employees={employees}
+              currentPeriod={payrollPeriod}
+              onPeriodChange={setPayrollPeriod}
+              onDisbursePayment={async (data) => {
+                const ok = await disburseSalaryPayment(data);
+                if (ok) fetchExpenses();
+                return ok;
+              }}
+              onVoidPayment={async (id, reason) => {
+                const ok = await voidSalaryPayment(id, reason);
+                if (ok) fetchExpenses();
+                return ok;
+              }}
+              onCreateAdvance={createAdvance}
+              isSubmittingPayment={isSubmittingPayment}
+            />
+
+            {/* Salary Expenses Audit Table */}
+            <Card className="border-slate-800 bg-slate-950/40">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Receipt className="w-4 h-4 text-primary" />
+                  <span>سجل المصروفات المباشرة تحت بند الرواتب</span>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  جميع حركات الصرف المسجلة تلقائياً في دفتر المصروفات عند دفع الرواتب
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="border-t border-slate-800 overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-slate-900/60 text-xs">
+                      <TableRow className="border-slate-800">
+                        <TableHead className="text-right">التاريخ</TableHead>
+                        <TableHead className="text-right">البيان</TableHead>
+                        <TableHead className="text-left">المبلغ</TableHead>
+                        <TableHead className="text-center">المرجع</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredAndCategorizedExpenses.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center py-6 text-muted-foreground text-xs">
+                            لا توجد سندات صرف رواتب مسجلة لهذه الفترة
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredAndCategorizedExpenses.map((e) => (
+                          <TableRow key={e.id} className="border-slate-800/60 text-xs">
+                            <TableCell className="font-mono">{e.date}</TableCell>
+                            <TableCell>{e.description}</TableCell>
+                            <TableCell className="text-left font-mono font-bold text-emerald-400">
+                              {e.amount.toLocaleString('ar-EG')} ج.م
+                            </TableCell>
+                            <TableCell className="text-center font-mono text-[10px] text-muted-foreground">
+                              {e.reference_id || e.id.slice(0, 8)}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+          <>
+            {/* Top Summary Cards */}
+            <div className="grid gap-4 md:grid-cols-3">
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
             <Card className="hover:shadow-md transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">إجمالي المصروفات</CardTitle>
@@ -644,6 +771,15 @@ export default function Expenses() {
           </DialogContent>
         </Dialog>
 
+        {/* Add Expense Dialog */}
+        <AddExpenseDialog
+          open={isAddDialogOpen}
+          onOpenChange={setIsAddDialogOpen}
+          onSuccess={fetchExpenses}
+          onOpenPayroll={() => setCategoryFilter('رواتب')}
+        />
+          </>
+        )}
       </div>
     </MainLayout>
   );
