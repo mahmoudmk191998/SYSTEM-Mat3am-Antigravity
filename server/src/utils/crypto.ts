@@ -53,3 +53,25 @@ export async function hashSecret(secret: string): Promise<string> {
 export async function verifySecret(secret: string, hash: string): Promise<boolean> {
   return bcrypt.compare(secret, hash);
 }
+
+export function hashPinWithSalt(pin: string, customSalt?: string): string {
+  const salt = customSalt || crypto.randomBytes(16).toString('hex');
+  const hash = crypto.createHash('sha256').update(`${salt}:${pin}`).digest('hex');
+  return `v1$${salt}$${hash}`;
+}
+
+export async function verifyEmployeePin(pin: string, storedHash: string): Promise<boolean> {
+  if (!storedHash) return false;
+  if (storedHash.startsWith('v1$')) {
+    const parts = storedHash.split('$');
+    if (parts.length !== 3) return false;
+    const salt = parts[1];
+    const expected = hashPinWithSalt(pin, salt);
+    return expected === storedHash;
+  }
+  if (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$')) {
+    return bcrypt.compare(pin, storedHash);
+  }
+  // Plaintext backward-compatibility fallback
+  return storedHash === pin;
+}

@@ -4,6 +4,7 @@ import { collection, doc, query, where, orderBy, getDocs, addDoc, updateDoc, del
 import { useAuth } from './useAuth';
 import { useAppStore } from '@/lib/store';
 import { toast } from 'sonner';
+import { hashPin } from '@/lib/attendanceSecurity';
 
 const fetchCollection = async (
   colPath: string, 
@@ -1199,10 +1200,40 @@ export function useCustomers(tenantId: string | null) {
   return { customers, loading, addCustomer, updateCustomer, deleteCustomer, refresh: fetch };
 }
 
+export interface HrSettings {
+  attendance_enabled: boolean;
+  qr_attendance_enabled: boolean;
+  attendance_token: string;
+  attendance_token_rotated_at?: string;
+  location_restriction: boolean;
+  latitude: number | null;
+  longitude: number | null;
+  geofence_radius: number;
+  default_grace_period: number;
+  late_deduction_enabled: boolean;
+  early_leave_deduction_enabled: boolean;
+  overtime_enabled: boolean;
+}
+
+const DEFAULT_HR_SETTINGS: HrSettings = {
+  attendance_enabled: true,
+  qr_attendance_enabled: true,
+  attendance_token: '',
+  location_restriction: false,
+  latitude: null,
+  longitude: null,
+  geofence_radius: 100,
+  default_grace_period: 10,
+  late_deduction_enabled: false,
+  early_leave_deduction_enabled: false,
+  overtime_enabled: false,
+};
+
 export function useHR(tenantId: string | null) {
   const [employees, setEmployees] = useState<any[]>([]);
   const [shifts, setShifts] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<any[]>([]);
+  const [hrSettings, setHrSettings] = useState<HrSettings>(DEFAULT_HR_SETTINGS);
   const [loading, setLoading] = useState(true);
 
   const fetchAll = async () => {
@@ -1214,11 +1245,31 @@ export function useHR(tenantId: string | null) {
       const [empData, shiftsData, attData] = await Promise.all([
         fetchCollection('employees', tenantId),
         fetchCollection('shifts', tenantId),
-        fetchCollection('attendance', tenantId)
+        fetchCollection('attendance', tenantId, 'tenant_id', 'date', 'desc')
       ]);
       setEmployees(empData);
       setShifts(shiftsData);
       setAttendance(attData);
+
+      // Fetch or init HR settings
+      const settingsDocRef = doc(db, 'hr_settings', tenantId);
+      const settingsSnap = await getDoc(settingsDocRef);
+      if (settingsSnap.exists()) {
+        setHrSettings({ ...DEFAULT_HR_SETTINGS, ...settingsSnap.data() as HrSettings });
+      } else {
+        // Check if token exists in tenant doc or generate new
+        const tenantSnap = await getDoc(doc(db, 'tenants', tenantId));
+        let token = tenantSnap.exists() ? tenantSnap.data()?.attendance_token : null;
+        if (!token) {
+          token = crypto.randomUUID();
+        }
+        const initialSettings: HrSettings = {
+          ...DEFAULT_HR_SETTINGS,
+          attendance_token: token,
+        };
+        await setDoc(settingsDocRef, { ...initialSettings, tenant_id: tenantId });
+        setHrSettings(initialSettings);
+      }
     } catch (e: any) {
       toast.error('خطأ في جلب بيانات الموارد البشرية');
     } finally {
@@ -1231,11 +1282,37 @@ export function useHR(tenantId: string | null) {
   const addEmployee = async (data: any) => {
     if (!tenantId) return null;
     try {
-      const docRef = await addDoc(collection(db, 'employees'), {
+      const payload: any = {
         ...data,
         tenant_id: tenantId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      if (data.pin) {
+        if (!/^\d{4}$/.test(data.pin)) {
+          toast.error('يجب أن يتكون رمز PIN من 4 أرقام بالضبط');
+          return null;
+        }
+        payload.pin_hash = await hashPin(data.pin);
+        payload.pin_set = true;
+        delete payload.pin; // Do not store plaintext PIN!
+      }
+
+      const docRef = await addDoc(collection(db, 'employees'), payload);
+
+      // Log to audit
+      await addDoc(collection(db, 'audit_logs'), {
+        tenant_id: tenantId,
+        action: 'employee_created',
+        entity: 'employee',
+        target_id: docRef.id,
+        user: 'المدير',
+        details: `إضافة موظف جديد: ${payload.name} (${payload.role})`,
+        severity: 'info',
         created_at: new Date().toISOString()
       });
+
       await fetchAll();
       toast.success('تمت إضافة الموظف بنجاح');
       return docRef.id;
@@ -1244,16 +1321,91 @@ export function useHR(tenantId: string | null) {
 
   const updateEmployee = async (id: string, updates: any) => {
     try {
-      await updateDoc(doc(db, 'employees', id), updates);
+      const payload = { ...updates, updated_at: new Date().toISOString() };
+      if (updates.pin) {
+        if (!/^\d{4}$/.test(updates.pin)) {
+          toast.error('يجب أن يتكون رمز PIN من 4 أرقام بالضبط');
+          return false;
+        }
+        payload.pin_hash = await hashPin(updates.pin);
+        payload.pin_set = true;
+        delete payload.pin;
+      }
+
+      await updateDoc(doc(db, 'employees', id), payload);
+
+      if (tenantId) {
+        await addDoc(collection(db, 'audit_logs'), {
+          tenant_id: tenantId,
+          action: 'employee_updated',
+          entity: 'employee',
+          target_id: id,
+          user: 'المدير',
+          details: `تحديث بيانات الموظف: ${updates.name || id}`,
+          severity: 'info',
+          created_at: new Date().toISOString()
+        });
+      }
+
       await fetchAll();
       toast.success('تم تحديث بيانات الموظف بنجاح');
       return true;
     } catch (e: any) { toast.error('خطأ في تحديث الموظف: ' + e.message); return false; }
   };
 
+  const changeEmployeePin = async (id: string, newPin: string) => {
+    if (!/^\d{4}$/.test(newPin)) {
+      toast.error('يجب أن يتكون رمز PIN من 4 أرقام بالضبط');
+      return false;
+    }
+    try {
+      const pin_hash = await hashPin(newPin);
+      await updateDoc(doc(db, 'employees', id), {
+        pin_hash,
+        pin_set: true,
+        updated_at: new Date().toISOString()
+      });
+
+      if (tenantId) {
+        await addDoc(collection(db, 'audit_logs'), {
+          tenant_id: tenantId,
+          action: 'employee_pin_changed',
+          entity: 'employee',
+          target_id: id,
+          user: 'المدير',
+          details: `تغيير الرمز السري PIN للموظف`,
+          severity: 'warning',
+          created_at: new Date().toISOString()
+        });
+      }
+
+      await fetchAll();
+      toast.success('تم تحديث رمز PIN بنجاح');
+      return true;
+    } catch (e: any) {
+      toast.error('خطأ في تغيير الرمز السري: ' + e.message);
+      return false;
+    }
+  };
+
   const deleteEmployee = async (id: string) => {
     try {
+      const emp = employees.find(e => e.id === id);
       await deleteDoc(doc(db, 'employees', id));
+
+      if (tenantId) {
+        await addDoc(collection(db, 'audit_logs'), {
+          tenant_id: tenantId,
+          action: 'employee_deleted',
+          entity: 'employee',
+          target_id: id,
+          user: 'المدير',
+          details: `حذف الموظف: ${emp?.name || id}`,
+          severity: 'error',
+          created_at: new Date().toISOString()
+        });
+      }
+
       await fetchAll();
       toast.success('تم حذف الموظف بنجاح');
       return true;
@@ -1266,7 +1418,8 @@ export function useHR(tenantId: string | null) {
       const docRef = await addDoc(collection(db, 'attendance'), {
         ...data,
         tenant_id: tenantId,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       });
       await fetchAll();
       toast.success('تم تسجيل الحضور بنجاح');
@@ -1276,11 +1429,58 @@ export function useHR(tenantId: string | null) {
 
   const updateAttendance = async (id: string, updates: any) => {
     try {
-      await updateDoc(doc(db, 'attendance', id), updates);
+      await updateDoc(doc(db, 'attendance', id), {
+        ...updates,
+        updated_at: new Date().toISOString()
+      });
       await fetchAll();
       toast.success('تم تحديث السجل بنجاح');
       return true;
     } catch (e: any) { toast.error('خطأ في التحديث: ' + e.message); return false; }
+  };
+
+  const manualCorrectAttendance = async (recordId: string | null, payload: any) => {
+    if (!tenantId) return false;
+    try {
+      const nowIso = new Date().toISOString();
+      const correctionData = {
+        ...payload,
+        isManualCorrection: true,
+        correctionAdminId: 'المدير',
+        updated_at: nowIso
+      };
+
+      let finalId = recordId;
+      if (recordId) {
+        await updateDoc(doc(db, 'attendance', recordId), correctionData);
+      } else {
+        const ref = await addDoc(collection(db, 'attendance'), {
+          ...correctionData,
+          tenant_id: tenantId,
+          created_at: nowIso
+        });
+        finalId = ref.id;
+      }
+
+      // Record in audit_logs
+      await addDoc(collection(db, 'audit_logs'), {
+        tenant_id: tenantId,
+        action: 'attendance_manually_corrected',
+        entity: 'attendance',
+        target_id: finalId,
+        user: 'المدير',
+        details: `تعديل يدوي لحضور الموظف: ${payload.employee_name || payload.employee_id} لتاريخ ${payload.date}. السبب: ${payload.correctionReason}`,
+        severity: 'warning',
+        created_at: nowIso
+      });
+
+      await fetchAll();
+      toast.success('تم تصحيح وتوثيق سجل الحضور بنجاح');
+      return true;
+    } catch (e: any) {
+      toast.error('خطأ في تصحيح الحضور: ' + e.message);
+      return false;
+    }
   };
 
   const addShift = async (data: any) => {
@@ -1288,13 +1488,30 @@ export function useHR(tenantId: string | null) {
     try {
       const docRef = await addDoc(collection(db, 'shifts'), {
         ...data,
+        gracePeriod: Number(data.gracePeriod ?? 10),
+        breakMinutes: Number(data.breakMinutes ?? 0),
         tenant_id: tenantId,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       });
       await fetchAll();
       toast.success('تمت إضافة الوردية بنجاح');
       return docRef.id;
     } catch (e: any) { toast.error('خطأ في الإضافة: ' + e.message); return null; }
+  };
+
+  const updateShift = async (id: string, updates: any) => {
+    try {
+      await updateDoc(doc(db, 'shifts', id), {
+        ...updates,
+        gracePeriod: Number(updates.gracePeriod ?? 10),
+        breakMinutes: Number(updates.breakMinutes ?? 0),
+        updated_at: new Date().toISOString()
+      });
+      await fetchAll();
+      toast.success('تم تحديث الوردية بنجاح');
+      return true;
+    } catch (e: any) { toast.error('خطأ في تحديث الوردية: ' + e.message); return false; }
   };
 
   const deleteShift = async (id: string) => {
@@ -1306,7 +1523,69 @@ export function useHR(tenantId: string | null) {
     } catch (e: any) { toast.error('خطأ في الحذف: ' + e.message); return false; }
   };
 
-  return { employees, shifts, attendance, loading, addEmployee, updateEmployee, deleteEmployee, addAttendance, updateAttendance, addShift, deleteShift, refresh: fetchAll };
+  const updateHrSettings = async (updates: Partial<HrSettings>) => {
+    if (!tenantId) return false;
+    try {
+      const nextSettings = { ...hrSettings, ...updates };
+      await setDoc(doc(db, 'hr_settings', tenantId), nextSettings, { merge: true });
+      setHrSettings(nextSettings);
+      toast.success('تم حفظ إعدادات الموارد البشرية بنجاح');
+      return true;
+    } catch (e: any) {
+      toast.error('خطأ في حفظ الإعدادات: ' + e.message);
+      return false;
+    }
+  };
+
+  const rotateQrToken = async () => {
+    if (!tenantId) return null;
+    try {
+      const newToken = crypto.randomUUID();
+      const rotatedAt = new Date().toISOString();
+      await updateHrSettings({
+        attendance_token: newToken,
+        attendance_token_rotated_at: rotatedAt
+      });
+
+      // Log in audit
+      await addDoc(collection(db, 'audit_logs'), {
+        tenant_id: tenantId,
+        action: 'attendance_token_rotated',
+        entity: 'qr_token',
+        user: 'المدير',
+        details: 'تم تدوير رمز QR لتسجيل الحضور وإلغاء الرمز السابق',
+        severity: 'info',
+        created_at: rotatedAt
+      });
+
+      toast.success('تم تدوير رمز الـ QR بنجاح وتحديث الرابط');
+      return newToken;
+    } catch (e: any) {
+      toast.error('فشل تدوير الرمز: ' + e.message);
+      return null;
+    }
+  };
+
+  return {
+    employees,
+    shifts,
+    attendance,
+    hrSettings,
+    loading,
+    addEmployee,
+    updateEmployee,
+    changeEmployeePin,
+    deleteEmployee,
+    addAttendance,
+    updateAttendance,
+    manualCorrectAttendance,
+    addShift,
+    updateShift,
+    deleteShift,
+    updateHrSettings,
+    rotateQrToken,
+    refresh: fetchAll
+  };
 }
 
 export function useDelivery(tenantId: string | null) {

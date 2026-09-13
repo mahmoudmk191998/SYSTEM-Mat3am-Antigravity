@@ -14,6 +14,7 @@ import { adminClientsRouter } from './adminClients.routes.js';
 import { adminIntegrationsRouter } from './adminIntegrations.routes.js';
 import { adminObservabilityRouter } from './adminObservability.routes.js';
 import { developerPlaygroundRouter } from './developerPlayground.routes.js';
+import { attendanceRouter } from './attendance.routes.js';
 import { sseRouter } from '../../realtime/sse/sse.routes.js';
 
 export const v1Router = Router();
@@ -21,7 +22,7 @@ export const v1Router = Router();
 // Mount Health Route (Public)
 v1Router.use('/', healthRouter);
 
-// Mount Catalog, Pricing, Delivery, Offers, Settings, Orders, Webhooks, Admin Clients & Universal Integrations Routes
+// Mount Catalog, Pricing, Delivery, Offers, Settings, Orders, Webhooks, Admin Clients, Universal Integrations & Attendance Routes
 v1Router.use('/', menuRouter);
 v1Router.use('/', categoriesRouter);
 v1Router.use('/', productsRouter);
@@ -36,4 +37,5 @@ v1Router.use('/', adminClientsRouter);
 v1Router.use('/', adminIntegrationsRouter);
 v1Router.use('/', adminObservabilityRouter);
 v1Router.use('/', developerPlaygroundRouter);
+v1Router.use('/', attendanceRouter);
 v1Router.use('/', sseRouter);

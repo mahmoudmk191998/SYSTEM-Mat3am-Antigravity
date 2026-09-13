@@ -1,492 +1,2030 @@
-import { useState } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { MainLayout } from '@/components/layout';
 import { useFormatters } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import {
   UserCog, Plus, Search, Calendar, Clock, CheckCircle, Users,
   Briefcase, DollarSign, Timer, Edit, Trash2, Eye, Shield,
+  QrCode, Printer, Download, Copy, RefreshCw, KeyRound, MapPin,
+  AlertTriangle, Sliders, FileText, CheckCircle2, XCircle, ArrowUpDown,
+  Lock, Phone, ChevronRight, UserMinus, UserCheck, Calculator
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useHR, useTenantBranch } from '@/hooks/useDatabase';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-
-// Mock data removed
+import { useHR, useTenantBranch } from '@/hooks/useDatabase';
+import { QRCodeSVG } from 'qrcode.react';
+import { toast } from 'sonner';
+import { formatWorkedHours, calculateLateMinutes, timeStringToMinutes } from '@/lib/attendanceSecurity';
 
 const statusColors: Record<string, string> = {
-  active: 'bg-success/10 text-success', on_leave: 'bg-warning/10 text-warning', inactive: 'bg-destructive/10 text-destructive',
-  present: 'bg-success/10 text-success', late: 'bg-warning/10 text-warning', absent: 'bg-destructive/10 text-destructive',
+  active: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+  inactive: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
+  on_leave: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+  present: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+  late: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+  absent: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
+  early_leave: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
+  incomplete: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
 };
+
 const statusLabels: Record<string, string> = {
-  active: 'نشط', on_leave: 'إجازة', inactive: 'غير نشط', present: 'حاضر', late: 'متأخر', absent: 'غائب',
+  active: 'نشط',
+  inactive: 'غير نشط',
+  on_leave: 'إجازة',
+  present: 'حاضر',
+  late: 'متأخر',
+  absent: 'غائب',
+  early_leave: 'انصراف مبكر',
+  incomplete: 'غير مكتمل',
 };
 
 export default function HR() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [newEmployee, setNewEmployee] = useState({ name: '', role: '', department: '', phone: '', salary: '' });
-  const [editingEmployee, setEditingEmployee] = useState<any>(null);
+  const { tenantId, branchId } = useTenantBranch();
+  const {
+    employees: dbEmployees,
+    shifts: dbShifts,
+    attendance: dbAttendance,
+    hrSettings,
+    loading,
+    addEmployee,
+    updateEmployee,
+    changeEmployeePin,
+    deleteEmployee,
+    manualCorrectAttendance,
+    addShift,
+    updateShift,
+    deleteShift,
+    updateHrSettings,
+    rotateQrToken,
+  } = useHR(tenantId);
 
-  const [isAddAttendanceOpen, setIsAddAttendanceOpen] = useState(false);
-  const [newAttendance, setNewAttendance] = useState({ employee_id: '', checkIn: '', status: 'present' });
-  
-  const [isAddShiftOpen, setIsAddShiftOpen] = useState(false);
-  const [newShift, setNewShift] = useState({ name: '', startTime: '', endTime: '', employees: 0, days: [] as string[] });
-  
-  const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
-  const [selectedShifts, setSelectedShifts] = useState<string[]>([]);
-
-  const { tenantId } = useTenantBranch();
-  const { employees: dbEmployees, shifts: dbShifts, attendance: dbAttendance, addEmployee, updateEmployee, deleteEmployee, addAttendance, updateAttendance, addShift, deleteShift, loading } = useHR(tenantId);
   const { currency, number } = useFormatters();
 
-  const employees = dbEmployees.map(e => ({
-    id: e.id,
-    name: e.name || '',
-    role: e.role || '',
-    department: e.department || '',
-    phone: e.phone || '',
-    salary: Number(e.salary) || 0,
-    hireDate: e.hire_date || '',
-    status: e.status || 'active'
-  }));
+  // Active Tab
+  const [activeTab, setActiveTab] = useState('employees');
 
-  const shifts = dbShifts.length > 0 ? dbShifts : [];
-  const attendance = dbAttendance.length > 0 ? dbAttendance : [];
+  // Search & Filters for Employees
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
 
-  const filteredEmployees = employees.filter(e =>
-    e.name.includes(searchQuery) || e.role.includes(searchQuery)
-  );
+  // Add / Edit Employee Modals
+  const [isAddEmployeeOpen, setIsAddEmployeeOpen] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<any>(null);
+  const [newEmployee, setNewEmployee] = useState({
+    name: '',
+    phone: '',
+    role: '',
+    department: '',
+    salary: '',
+    employee_type: 'full_time',
+    status: 'active',
+    pin: '',
+    shift_id: '',
+  });
 
-  const handleBulkDeleteEmployees = async () => {
-    if (!window.confirm(`هل أنت متأكد من حذف ${selectedEmployees.length} موظف؟`)) return;
-    for (const id of selectedEmployees) {
-      await deleteEmployee(id);
+  // Change PIN Modal
+  const [pinChangeEmployee, setPinChangeEmployee] = useState<any>(null);
+  const [newPinValue, setNewPinValue] = useState('');
+  const [confirmPinValue, setConfirmPinValue] = useState('');
+
+  // Employee Profile Modal (View Details)
+  const [profileEmployee, setProfileEmployee] = useState<any>(null);
+
+  // Shifts Modals
+  const [isAddShiftOpen, setIsAddShiftOpen] = useState(false);
+  const [editingShift, setEditingShift] = useState<any>(null);
+  const [shiftForm, setShiftForm] = useState({
+    name: '',
+    startTime: '09:00',
+    endTime: '17:00',
+    gracePeriod: 10,
+    breakMinutes: 0,
+    days: ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'],
+  });
+
+  // Attendance Filters & Manual Correction Modal
+  const [attDateFilter, setAttDateFilter] = useState(new Date().toISOString().split('T')[0]);
+  const [attStatusFilter, setAttStatusFilter] = useState('all');
+  const [attSearchQuery, setAttSearchQuery] = useState('');
+  const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
+  const [correctionRecord, setCorrectionRecord] = useState<any>(null);
+  const [correctionForm, setCorrectionForm] = useState({
+    employee_id: '',
+    date: new Date().toISOString().split('T')[0],
+    checkIn: '09:00',
+    checkOut: '17:00',
+    status: 'present',
+    reason: '',
+  });
+
+  // Reports & Payroll Filter
+  const [reportDateFrom, setReportDateFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().split('T')[0];
+  });
+  const [reportDateTo, setReportDateTo] = useState(new Date().toISOString().split('T')[0]);
+  const [reportEmployeeId, setReportEmployeeId] = useState('all');
+
+  // Print ref for QR Code
+  const qrPrintRef = useRef<HTMLDivElement>(null);
+
+  // Normalized Employees List
+  const employees = useMemo(() => {
+    return dbEmployees.map((e) => ({
+      id: e.id,
+      name: e.name || '',
+      role: e.role || '',
+      department: e.department || '',
+      phone: e.phone || '',
+      salary: Number(e.salary) || 0,
+      hireDate: e.hire_date || '',
+      employeeType: e.employee_type || 'full_time',
+      status: e.status || 'active',
+      pinSet: Boolean(e.pin_set || e.pin_hash || e.pin),
+      shiftId: e.default_shift_id || e.shift_id || null,
+      createdAt: e.created_at || '',
+    }));
+  }, [dbEmployees]);
+
+  // Roles list for filter
+  const allRoles = useMemo(() => {
+    const set = new Set<string>();
+    employees.forEach((e) => {
+      if (e.role) set.add(e.role);
+    });
+    return Array.from(set);
+  }, [employees]);
+
+  // Attendance list normalized
+  const attendance = useMemo(() => {
+    return dbAttendance.map((a) => ({
+      id: a.id,
+      employeeId: a.employee_id,
+      employeeName: a.employee_name || employees.find((e) => e.id === a.employee_id)?.name || 'موظف',
+      employeeRole: a.employee_role || employees.find((e) => e.id === a.employee_id)?.role || '',
+      date: a.date || '',
+      checkIn: a.checkIn || '',
+      checkInAt: a.checkInAt || '',
+      checkOut: a.checkOut || '',
+      checkOutAt: a.checkOutAt || '',
+      hours: Number(a.hours) || 0,
+      workedMinutes: Number(a.workedMinutes) || 0,
+      lateMinutes: Number(a.lateMinutes) || 0,
+      earlyLeaveMinutes: Number(a.earlyLeaveMinutes) || 0,
+      status: a.status || 'present',
+      isManualCorrection: Boolean(a.isManualCorrection),
+      correctionReason: a.correctionReason || null,
+      shiftName: a.shift_name || null,
+    }));
+  }, [dbAttendance, employees]);
+
+  // Today's stats
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayAttendance = useMemo(() => attendance.filter((a) => a.date === todayStr), [attendance, todayStr]);
+
+  const activeEmployeesCount = useMemo(() => employees.filter((e) => e.status === 'active').length, [employees]);
+  const presentTodayCount = useMemo(() => todayAttendance.filter((a) => a.status === 'present' || a.status === 'late').length, [todayAttendance]);
+  const lateTodayCount = useMemo(() => todayAttendance.filter((a) => a.status === 'late').length, [todayAttendance]);
+  const absentTodayCount = Math.max(0, activeEmployeesCount - presentTodayCount);
+  const onLeaveTodayCount = useMemo(() => employees.filter((e) => e.status === 'on_leave').length, [employees]);
+  const totalWorkedHoursToday = useMemo(() => todayAttendance.reduce((acc, curr) => acc + curr.hours, 0), [todayAttendance]);
+
+  // Filtered employees
+  const filteredEmployees = useMemo(() => {
+    return employees.filter((e) => {
+      const matchesSearch = e.name.includes(searchQuery) || e.phone.includes(searchQuery) || e.role.includes(searchQuery);
+      const matchesRole = roleFilter === 'all' || e.role === roleFilter;
+      const matchesStatus = statusFilter === 'all' || e.status === statusFilter;
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [employees, searchQuery, roleFilter, statusFilter]);
+
+  // Attendance Records Filtered for the Table
+  const filteredAttendance = useMemo(() => {
+    return attendance.filter((a) => {
+      const matchesDate = !attDateFilter || a.date === attDateFilter;
+      const matchesStatus = attStatusFilter === 'all' || a.status === attStatusFilter;
+      const matchesSearch = !attSearchQuery || a.employeeName.includes(attSearchQuery);
+      return matchesDate && matchesStatus && matchesSearch;
+    });
+  }, [attendance, attDateFilter, attStatusFilter, attSearchQuery]);
+
+  // Public QR attendance URL
+  const attendanceUrl = useMemo(() => {
+    const origin = window.location.origin;
+    return `${origin}/attendance?token=${encodeURIComponent(hrSettings.attendance_token || '')}`;
+  }, [hrSettings.attendance_token]);
+
+  // Handle Add Employee
+  const handleSaveEmployee = async () => {
+    if (!newEmployee.name || !newEmployee.role) {
+      toast.error('الاسم والمسمى الوظيفي مطلوبان');
+      return;
     }
-    setSelectedEmployees([]);
+    if (newEmployee.pin && !/^\d{4}$/.test(newEmployee.pin)) {
+      toast.error('رمز PIN يجب أن يتكون من 4 أرقام بالضبط');
+      return;
+    }
+
+    const success = await addEmployee({
+      name: newEmployee.name,
+      phone: newEmployee.phone,
+      role: newEmployee.role,
+      department: newEmployee.department,
+      salary: Number(newEmployee.salary) || 0,
+      employee_type: newEmployee.employee_type,
+      status: newEmployee.status,
+      default_shift_id: newEmployee.shift_id || null,
+      hire_date: new Date().toISOString().split('T')[0],
+      pin: newEmployee.pin || null,
+    });
+
+    if (success) {
+      setIsAddEmployeeOpen(false);
+      setNewEmployee({
+        name: '',
+        phone: '',
+        role: '',
+        department: '',
+        salary: '',
+        employee_type: 'full_time',
+        status: 'active',
+        pin: '',
+        shift_id: '',
+      });
+    }
   };
 
-  const handleBulkDeleteShifts = async () => {
-    if (!window.confirm(`هل أنت متأكد من حذف ${selectedShifts.length} وردية؟`)) return;
-    for (const id of selectedShifts) {
-      await deleteShift(id);
+  // Handle Update Employee
+  const handleUpdateEmployee = async () => {
+    if (!editingEmployee) return;
+    const success = await updateEmployee(editingEmployee.id, {
+      name: editingEmployee.name,
+      phone: editingEmployee.phone,
+      role: editingEmployee.role,
+      department: editingEmployee.department,
+      salary: Number(editingEmployee.salary) || 0,
+      employee_type: editingEmployee.employeeType || editingEmployee.employee_type,
+      status: editingEmployee.status,
+      default_shift_id: editingEmployee.shiftId || editingEmployee.default_shift_id || null,
+    });
+
+    if (success) {
+      setEditingEmployee(null);
     }
-    setSelectedShifts([]);
   };
 
-  const activeCount = employees.filter(e => e.status === 'active').length;
-  const totalSalaries = employees.reduce((sum, e) => sum + e.salary, 0);
-  const presentToday = attendance.filter(a => a.status === 'present').length;
+  // Handle Change PIN
+  const handleSavePin = async () => {
+    if (!pinChangeEmployee) return;
+    if (!/^\d{4}$/.test(newPinValue)) {
+      toast.error('يجب أن يتكون رمز PIN من 4 أرقام بالضبط');
+      return;
+    }
+    if (newPinValue !== confirmPinValue) {
+      toast.error('الرمز السري وتأكيد الرمز غير متطابقين');
+      return;
+    }
+
+    const success = await changeEmployeePin(pinChangeEmployee.id, newPinValue);
+    if (success) {
+      setPinChangeEmployee(null);
+      setNewPinValue('');
+      setConfirmPinValue('');
+    }
+  };
+
+  // Handle Manual Attendance Correction
+  const handleSaveCorrection = async () => {
+    if (!correctionForm.employee_id || !correctionForm.date || !correctionForm.checkIn) {
+      toast.error('بيانات الحضور الأساسية مطلوبة');
+      return;
+    }
+    if (!correctionForm.reason.trim()) {
+      toast.error('يجب كتابة سبب التعديل اليدوي لتوثيقه في سجل التدقيق');
+      return;
+    }
+
+    const selectedEmp = employees.find((e) => e.id === correctionForm.employee_id);
+
+    let workedMinutes = 0;
+    let hours = 0;
+    if (correctionForm.checkIn && correctionForm.checkOut) {
+      const inMins = timeStringToMinutes(correctionForm.checkIn);
+      const outMins = timeStringToMinutes(correctionForm.checkOut);
+      workedMinutes = Math.max(0, outMins - inMins);
+      hours = Math.round((workedMinutes / 60) * 10) / 10;
+    }
+
+    const payload = {
+      employee_id: correctionForm.employee_id,
+      employee_name: selectedEmp?.name || 'موظف',
+      employee_role: selectedEmp?.role || '',
+      date: correctionForm.date,
+      checkIn: correctionForm.checkIn,
+      checkInAt: `${correctionForm.date}T${correctionForm.checkIn}:00.000Z`,
+      checkOut: correctionForm.checkOut || null,
+      checkOutAt: correctionForm.checkOut ? `${correctionForm.date}T${correctionForm.checkOut}:00.000Z` : null,
+      status: correctionForm.status,
+      workedMinutes,
+      hours,
+      correctionReason: correctionForm.reason,
+    };
+
+    const success = await manualCorrectAttendance(correctionRecord ? correctionRecord.id : null, payload);
+    if (success) {
+      setCorrectionModalOpen(false);
+      setCorrectionRecord(null);
+      setCorrectionForm({
+        employee_id: '',
+        date: new Date().toISOString().split('T')[0],
+        checkIn: '09:00',
+        checkOut: '17:00',
+        status: 'present',
+        reason: '',
+      });
+    }
+  };
+
+  // Handle Shifts Save
+  const handleSaveShift = async () => {
+    if (!shiftForm.name || !shiftForm.startTime || !shiftForm.endTime) {
+      toast.error('اسم ومواعيد الوردية مطلوبة');
+      return;
+    }
+
+    if (editingShift) {
+      const success = await updateShift(editingShift.id, shiftForm);
+      if (success) {
+        setEditingShift(null);
+        setIsAddShiftOpen(false);
+      }
+    } else {
+      const id = await addShift(shiftForm);
+      if (id) {
+        setIsAddShiftOpen(false);
+        setShiftForm({
+          name: '',
+          startTime: '09:00',
+          endTime: '17:00',
+          gracePeriod: 10,
+          breakMinutes: 0,
+          days: ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'],
+        });
+      }
+    }
+  };
+
+  // Copy Link to Clipboard
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(attendanceUrl);
+    toast.success('تم نسخ رابط صفحة الحضور إلى الحافظة');
+  };
+
+  // Print QR Code
+  const handlePrintQR = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('يرجى السماح بفتح النوافذ المنبثقة للطباعة');
+      return;
+    }
+
+    printWindow.document.write(`
+      <html dir="rtl" lang="ar">
+        <head>
+          <title>رمز QR لتسجيل الحضور والانصراف</title>
+          <style>
+            body { font-family: 'Cairo', system-ui, sans-serif; text-align: center; padding: 40px; margin: 0; }
+            .container { border: 3px dashed #334155; padding: 40px; border-radius: 24px; max-width: 500px; margin: 0 auto; }
+            h1 { font-size: 28px; margin-bottom: 8px; color: #0f172a; }
+            p { font-size: 16px; color: #475569; margin-bottom: 24px; }
+            .qr-wrapper { margin: 24px auto; }
+            .instructions { font-size: 14px; background: #f8fafc; padding: 16px; border-radius: 12px; margin-top: 24px; text-align: right; border: 1px solid #e2e8f0; }
+            .instructions ol { margin: 0; padding-right: 20px; color: #334155; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>تسجيل الحضور والانصراف</h1>
+            <p>امسح الرمز بكاميرا هاتفك لتسجيل الحضور أو الانصراف</p>
+            <div class="qr-wrapper">
+              ${qrPrintRef.current?.innerHTML || ''}
+            </div>
+            <div class="instructions">
+              <strong>تعليمات للموظف:</strong>
+              <ol>
+                <li>وجّه كاميرا الهاتف نحو رمز الـ QR أعلاه.</li>
+                <li>اضغط على الرابط الظاهر لفتح صفحة الحضور.</li>
+                <li>اختر اسمك من القائمة وأدخل رقم الـ PIN السري الخاص بك (4 أرقام).</li>
+                <li>سيتم تسجيل حضورك أو انصرافك تلقائياً وبدقة.</li>
+              </ol>
+            </div>
+          </div>
+          <script>
+            window.onload = function() { window.print(); window.close(); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  // Download QR Code as SVG
+  const handleDownloadQR = () => {
+    const svgElement = qrPrintRef.current?.querySelector('svg');
+    if (!svgElement) return;
+
+    const svgData = new XMLSerializer().serializeToString(svgElement);
+    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const svgUrl = URL.createObjectURL(svgBlob);
+    const downloadLink = document.createElement('a');
+    downloadLink.href = svgUrl;
+    downloadLink.download = `attendance_qr_${new Date().toISOString().split('T')[0]}.svg`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    toast.success('تم تنزيل رمز QR بنجاح');
+  };
+
+  // Get Current Location for Restaurant Coordinates
+  const handleCaptureCurrentGps = () => {
+    if (!navigator.geolocation) {
+      toast.error('المتصفح لا يدعم تحديد الموقع');
+      return;
+    }
+    toast.loading('جاري قراءة إحداثيات موقع المطعم...');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        toast.dismiss();
+        updateHrSettings({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+        });
+        toast.success(`تم حفظ إحداثيات المطعم بدقة (${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)})`);
+      },
+      (err) => {
+        toast.dismiss();
+        toast.error('تعذر تحديد الموقع. يرجى إعطاء الإذن للمتصفح.');
+      },
+      { enableHighAccuracy: true }
+    );
+  };
+
+  // Payroll Calculation Report Data
+  const payrollReportData = useMemo(() => {
+    return employees.map((emp) => {
+      // Find employee attendance records in range
+      const empAtt = attendance.filter((a) => {
+        const matchesEmp = a.employeeId === emp.id;
+        const matchesRange = (!reportDateFrom || a.date >= reportDateFrom) && (!reportDateTo || a.date <= reportDateTo);
+        return matchesEmp && matchesRange;
+      });
+
+      const attendedDays = empAtt.filter((a) => a.status === 'present' || a.status === 'late').length;
+      const lateDays = empAtt.filter((a) => a.status === 'late').length;
+      const totalLateMinutes = empAtt.reduce((sum, a) => sum + a.lateMinutes, 0);
+      const totalHours = empAtt.reduce((sum, a) => sum + a.hours, 0);
+
+      // Estimate salary & deductions
+      const baseSalary = emp.salary;
+      const dailyRate = baseSalary > 0 ? baseSalary / 30 : 0;
+      const hourlyRate = dailyRate / 8;
+
+      let lateDeductions = 0;
+      if (hrSettings.late_deduction_enabled && totalLateMinutes > 0) {
+        // Late deduction: hourly rate proportional to late minutes
+        lateDeductions = Math.round((totalLateMinutes / 60) * hourlyRate);
+      }
+
+      let overtimeBonus = 0;
+      if (hrSettings.overtime_enabled && totalHours > attendedDays * 8) {
+        const overtimeHours = totalHours - attendedDays * 8;
+        overtimeBonus = Math.round(overtimeHours * hourlyRate * 1.5);
+      }
+
+      const estimatedNet = Math.max(0, baseSalary - lateDeductions + overtimeBonus);
+
+      return {
+        ...emp,
+        attendedDays,
+        lateDays,
+        totalLateMinutes,
+        totalHours: Math.round(totalHours * 10) / 10,
+        lateDeductions,
+        overtimeBonus,
+        estimatedNet: Math.round(estimatedNet),
+      };
+    });
+  }, [employees, attendance, reportDateFrom, reportDateTo, hrSettings]);
+
+  // Export CSV for Payroll / Attendance
+  const handleExportCSV = () => {
+    const headers = ['اسم الموظف', 'الوظيفة', 'الراتب الأساسي', 'أيام الحضور', 'مرات التأخير', 'دقائق التأخير', 'ساعات العمل', 'الخصومات', 'الإضافي', 'صافي الراتب المتوقع'];
+    const rows = payrollReportData.map((d) => [
+      `"${d.name}"`,
+      `"${d.role}"`,
+      d.salary,
+      d.attendedDays,
+      d.lateDays,
+      d.totalLateMinutes,
+      d.totalHours,
+      d.lateDeductions,
+      d.overtimeBonus,
+      d.estimatedNet,
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `payroll_report_${reportDateFrom}_to_${reportDateTo}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success('تم تصدير التقرير بتنسيق CSV بنجاح');
+  };
 
   return (
     <MainLayout
-      title="الموارد البشرية والورديات"
-      subtitle="إدارة الموظفين والجدولة"
+      title="الموارد البشرية ونظام الحضور"
+      subtitle="إدارة الموظفين والورديات، تسجيل الحضور بـ QR و PIN، والرواتب"
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="gap-2 text-xs md:text-sm">
-            <Calendar className="w-4 h-4" />
-            <span className="hidden sm:inline">جدول الورديات</span>
+          <Button
+            variant="outline"
+            onClick={() => setActiveTab('qr')}
+            className="gap-2 text-xs md:text-sm border-primary/30 hover:bg-primary/10"
+          >
+            <QrCode className="w-4 h-4 text-primary" />
+            <span className="hidden sm:inline">QR الحضور</span>
           </Button>
-          <Button onClick={() => setIsAddOpen(true)} className="gap-2 text-xs md:text-sm">
+          <Button onClick={() => setIsAddEmployeeOpen(true)} className="gap-2 text-xs md:text-sm">
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">موظف جديد</span>
           </Button>
         </div>
       }
     >
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
-        <Card><CardContent className="p-3 md:p-4"><div className="flex items-center gap-3"><div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center"><Users className="w-5 h-5 md:w-6 md:h-6" /></div><div><p className="text-xl md:text-2xl font-bold">{number(employees.length)}</p><p className="text-xs md:text-sm text-muted-foreground">إجمالي الموظفين</p></div></div></CardContent></Card>
-        <Card><CardContent className="p-3 md:p-4"><div className="flex items-center gap-3"><div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-success/10 text-success flex items-center justify-center"><CheckCircle className="w-5 h-5 md:w-6 md:h-6" /></div><div><p className="text-xl md:text-2xl font-bold">{number(activeCount)}</p><p className="text-xs md:text-sm text-muted-foreground">نشطين</p></div></div></CardContent></Card>
-        <Card><CardContent className="p-3 md:p-4"><div className="flex items-center gap-3"><div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-info/10 text-info flex items-center justify-center"><Timer className="w-5 h-5 md:w-6 md:h-6" /></div><div><p className="text-xl md:text-2xl font-bold">{number(presentToday)}</p><p className="text-xs md:text-sm text-muted-foreground">حاضرين اليوم</p></div></div></CardContent></Card>
-        <Card><CardContent className="p-3 md:p-4"><div className="flex items-center gap-3"><div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-warning/10 text-warning flex items-center justify-center"><DollarSign className="w-5 h-5 md:w-6 md:h-6" /></div><div><p className="text-xl md:text-2xl font-bold">{currency(totalSalaries)}</p><p className="text-xs md:text-sm text-muted-foreground">إجمالي الرواتب</p></div></div></CardContent></Card>
+      {/* 1. Top KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+        <Card className="bg-slate-900/50 border-slate-800">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <Users className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-slate-100">{number(employees.length)}</p>
+                <p className="text-[11px] text-muted-foreground">إجمالي الموظفين</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900/50 border-slate-800">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
+                <CheckCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-emerald-400">{number(presentTodayCount)}</p>
+                <p className="text-[11px] text-muted-foreground">حاضرين اليوم</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900/50 border-slate-800">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center shrink-0">
+                <UserMinus className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-rose-400">{number(absentTodayCount)}</p>
+                <p className="text-[11px] text-muted-foreground">غائبين اليوم</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900/50 border-slate-800">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-amber-400">{number(lateTodayCount)}</p>
+                <p className="text-[11px] text-muted-foreground">متأخرين اليوم</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900/50 border-slate-800">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0">
+                <Calendar className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-indigo-400">{number(onLeaveTodayCount)}</p>
+                <p className="text-[11px] text-muted-foreground">في إجازة</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900/50 border-slate-800">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-400 flex items-center justify-center shrink-0">
+                <Timer className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-sky-400">{totalWorkedHoursToday} س</p>
+                <p className="text-[11px] text-muted-foreground">ساعات العمل اليوم</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <Tabs defaultValue="employees" className="space-y-4">
-        <TabsList className="flex-wrap h-auto">
-          <TabsTrigger value="employees">الموظفون</TabsTrigger>
-          <TabsTrigger value="attendance">الحضور</TabsTrigger>
-          <TabsTrigger value="shifts">الورديات</TabsTrigger>
-          <TabsTrigger value="roles">الأدوار</TabsTrigger>
+      {/* Main Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="flex-wrap h-auto bg-slate-900/80 border border-slate-800 p-1 rounded-xl">
+          <TabsTrigger value="employees" className="gap-2">
+            <Users className="w-4 h-4" />
+            الموظفون
+          </TabsTrigger>
+          <TabsTrigger value="attendance" className="gap-2">
+            <Clock className="w-4 h-4" />
+            حضور اليوم والسجل
+          </TabsTrigger>
+          <TabsTrigger value="qr" className="gap-2">
+            <QrCode className="w-4 h-4" />
+            QR Code الحضور
+          </TabsTrigger>
+          <TabsTrigger value="shifts" className="gap-2">
+            <Calendar className="w-4 h-4" />
+            الشيفتات ومواعيد العمل
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="gap-2">
+            <Calculator className="w-4 h-4" />
+            التقارير ومسير الرواتب
+          </TabsTrigger>
+          <TabsTrigger value="settings" className="gap-2">
+            <Sliders className="w-4 h-4" />
+            إعدادات الموارد البشرية
+          </TabsTrigger>
         </TabsList>
 
+        {/* ========================================================================= */}
+        {/* TAB 1: EMPLOYEES                                                          */}
+        {/* ========================================================================= */}
         <TabsContent value="employees" className="space-y-4">
-          <div className="flex gap-2">
-            {selectedEmployees.length > 0 && (
-              <Button onClick={handleBulkDeleteEmployees} variant="destructive" className="gap-2 shrink-0">
-                <Trash2 className="w-4 h-4" />
-                حذف ({selectedEmployees.length})
-              </Button>
-            )}
-            <div className="relative flex-1">
+          {/* Filter Bar */}
+          <div className="flex flex-col md:flex-row gap-2 items-center justify-between">
+            <div className="relative flex-1 w-full">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="بحث عن موظف..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pr-10" />
+              <Input
+                placeholder="بحث بالاسم، الوظيفة، أو رقم الهاتف..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pr-10"
+              />
             </div>
-            {filteredEmployees.length > 0 && (
-              <div className="flex items-center gap-2 px-3 border rounded-md bg-background">
-                <Checkbox
-                  checked={selectedEmployees.length === filteredEmployees.length}
-                  onCheckedChange={(c) => {
-                    if (c) setSelectedEmployees(filteredEmployees.map(e => e.id));
-                    else setSelectedEmployees([]);
-                  }}
-                />
-                <span className="text-sm font-medium">الكل</span>
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-xs md:text-sm"
+              >
+                <option value="all">جميع الوظائف</option>
+                {allRoles.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-xs md:text-sm"
+              >
+                <option value="all">جميع الحالات</option>
+                <option value="active">نشط</option>
+                <option value="inactive">غير نشط</option>
+                <option value="on_leave">إجازة</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Employees Cards Grid */}
+          <div className="grid gap-3">
+            {filteredEmployees.map((emp) => {
+              const todayRec = todayAttendance.find((a) => a.employeeId === emp.id);
+              return (
+                <Card key={emp.id} className="bg-card hover:border-primary/40 transition-colors">
+                  <CardContent className="p-3.5 md:p-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      {/* Avatar & Main Info */}
+                      <div className="flex items-center gap-3">
+                        <Avatar className="w-12 h-12 border border-slate-800">
+                          <AvatarFallback className="bg-primary/10 text-primary font-bold text-lg">
+                            {emp.name.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-bold text-base text-slate-100">{emp.name}</h3>
+                            <Badge className={cn('text-[10px] border', statusColors[emp.status])}>
+                              {statusLabels[emp.status] || emp.status}
+                            </Badge>
+                            {!emp.pinSet && (
+                              <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30 gap-1 bg-amber-500/10">
+                                <KeyRound className="w-3 h-3" />
+                                بدون PIN
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-primary font-medium">{emp.role}</p>
+                          <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
+                            <span className="flex items-center gap-1 font-mono" dir="ltr">
+                              <Phone className="w-3 h-3" />
+                              {emp.phone || 'بدون هاتف'}
+                            </span>
+                            {emp.department && <span>• {emp.department}</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Financial & Attendance Snapshot */}
+                      <div className="flex items-center gap-4 md:gap-6 border-t md:border-t-0 pt-2 md:pt-0">
+                        <div className="text-center">
+                          <p className="text-sm font-bold text-slate-100">{currency(emp.salary)}</p>
+                          <p className="text-[10px] text-muted-foreground">الراتب الأساسي</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-sm font-mono font-medium text-slate-200">
+                            {todayRec ? todayRec.checkIn : '--:--'}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">حضور اليوم</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-sm font-mono font-medium text-slate-200">
+                            {todayRec?.checkOut ? todayRec.checkOut : '--:--'}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">انصراف اليوم</p>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-1 self-end md:self-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setProfileEmployee(emp)}
+                          className="h-8 gap-1 text-xs"
+                          title="عرض ملف الموظف"
+                        >
+                          <Eye className="w-4 h-4" />
+                          <span className="hidden lg:inline">الملف</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setPinChangeEmployee(emp)}
+                          className="h-8 gap-1 text-xs text-amber-400 hover:text-amber-300"
+                          title="تعيين أو تغيير PIN"
+                        >
+                          <KeyRound className="w-4 h-4" />
+                          <span className="hidden lg:inline">PIN</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setEditingEmployee(emp)}
+                          className="h-8 w-8 text-muted-foreground hover:text-primary"
+                          title="تعديل"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={async () => {
+                            if (window.confirm(`هل أنت متأكد من حذف الموظف "${emp.name}"؟`)) {
+                              await deleteEmployee(emp.id);
+                            }
+                          }}
+                          className="h-8 w-8 text-muted-foreground hover:text-rose-400"
+                          title="حذف"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+
+            {filteredEmployees.length === 0 && (
+              <div className="text-center py-16 text-muted-foreground">
+                <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <p>لم يتم العثور على أي موظف مطابق</p>
               </div>
             )}
           </div>
+        </TabsContent>
 
-          <div className="grid gap-3">
-            {filteredEmployees.map((employee) => (
-              <Card key={employee.id} className="relative">
-                <div className="absolute top-3 right-3" onClick={e => e.stopPropagation()}>
-                  <Checkbox
-                    checked={selectedEmployees.includes(employee.id)}
-                    onCheckedChange={(c) => {
-                      if (c) setSelectedEmployees(prev => [...prev, employee.id]);
-                      else setSelectedEmployees(prev => prev.filter(id => id !== employee.id));
+        {/* ========================================================================= */}
+        {/* TAB 2: ATTENDANCE & MANUAL CORRECTION                                     */}
+        {/* ========================================================================= */}
+        <TabsContent value="attendance" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-lg">سجل الحضور والانصراف</CardTitle>
+                  <CardDescription className="text-xs">
+                    متابعة حضور وانصراف الموظفين وإجراء التصحيحات اليدوية عند الضرورة
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={attDateFilter}
+                    onChange={(e) => setAttDateFilter(e.target.value)}
+                    className="w-auto h-9 text-xs"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setCorrectionRecord(null);
+                      setCorrectionForm({
+                        employee_id: employees[0]?.id || '',
+                        date: attDateFilter || new Date().toISOString().split('T')[0],
+                        checkIn: '09:00',
+                        checkOut: '17:00',
+                        status: 'present',
+                        reason: '',
+                      });
+                      setCorrectionModalOpen(true);
                     }}
+                    className="gap-1.5 h-9 text-xs"
+                  >
+                    <Plus className="w-4 h-4" />
+                    تسجيل/تصحيح يدوي
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Filter Row */}
+              <div className="flex gap-2 mb-4">
+                <div className="relative flex-1">
+                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="ابحث باسم الموظف..."
+                    value={attSearchQuery}
+                    onChange={(e) => setAttSearchQuery(e.target.value)}
+                    className="pr-10 h-9 text-xs"
                   />
                 </div>
-                <CardContent className="p-3 md:p-4 pr-10 md:pr-12">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="w-10 h-10 md:w-14 md:h-14">
-                      <AvatarFallback className="text-sm md:text-lg bg-primary/10 text-primary">{employee.name.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                        <h3 className="font-bold text-sm md:text-lg">{employee.name}</h3>
-                        <Badge className={cn('text-[10px] md:text-xs', statusColors[employee.status])}>{statusLabels[employee.status]}</Badge>
-                      </div>
-                      <p className="text-xs md:text-sm text-primary font-medium">{employee.role}</p>
-                      <p className="text-[10px] md:text-sm text-muted-foreground">{employee.department} • {employee.phone}</p>
+                <select
+                  value={attStatusFilter}
+                  onChange={(e) => setAttStatusFilter(e.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-xs"
+                >
+                  <option value="all">جميع الحالات</option>
+                  <option value="present">حاضر</option>
+                  <option value="late">متأخر</option>
+                  <option value="early_leave">انصراف مبكر</option>
+                  <option value="on_leave">إجازة</option>
+                  <option value="absent">غائب</option>
+                </select>
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>الموظف</TableHead>
+                      <TableHead>التاريخ</TableHead>
+                      <TableHead>الحضور</TableHead>
+                      <TableHead>الانصراف</TableHead>
+                      <TableHead>ساعات العمل</TableHead>
+                      <TableHead>التأخير</TableHead>
+                      <TableHead>الحالة</TableHead>
+                      <TableHead className="text-left">الإجراءات</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAttendance.map((rec) => (
+                      <TableRow key={rec.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-bold text-slate-100 text-sm">{rec.employeeName}</p>
+                            <p className="text-[11px] text-muted-foreground">{rec.employeeRole}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{rec.date}</TableCell>
+                        <TableCell className="font-mono text-sm font-medium text-emerald-400">
+                          {rec.checkIn || '-'}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm font-medium text-indigo-400">
+                          {rec.checkOut || '-'}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {rec.hours > 0 ? `${rec.hours} ساعة` : '-'}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {rec.lateMinutes > 0 ? (
+                            <span className="text-amber-400 font-bold">{rec.lateMinutes} دقيقة</span>
+                          ) : (
+                            '-'
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={cn('text-[10px] border', statusColors[rec.status])}>
+                            {statusLabels[rec.status] || rec.status}
+                          </Badge>
+                          {rec.isManualCorrection && (
+                            <span className="block text-[9px] text-amber-400 mt-0.5">تعديل يدوي</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-left">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setCorrectionRecord(rec);
+                              setCorrectionForm({
+                                employee_id: rec.employeeId,
+                                date: rec.date,
+                                checkIn: rec.checkIn || '09:00',
+                                checkOut: rec.checkOut || '17:00',
+                                status: rec.status || 'present',
+                                reason: rec.correctionReason || '',
+                              });
+                              setCorrectionModalOpen(true);
+                            }}
+                            className="h-8 text-xs gap-1"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                            تعديل
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {filteredAttendance.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                          لا توجد سجلات حضور مسجلة لهذا التاريخ
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ========================================================================= */}
+        {/* TAB 3: QR CODE ATTENDANCE                                                 */}
+        {/* ========================================================================= */}
+        <TabsContent value="qr" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+            {/* QR Visual Card */}
+            <Card className="md:col-span-1 border-primary/30 text-center p-6 bg-slate-900/50">
+              <CardTitle className="text-base mb-1">رمز QR الحضور والانصراف</CardTitle>
+              <CardDescription className="text-xs mb-4">
+                يتم وضعه في مدخل المطعم أو لوحة الموظفين
+              </CardDescription>
+
+              <div
+                ref={qrPrintRef}
+                className="bg-white p-4 rounded-2xl inline-block shadow-xl border border-slate-200 mb-4"
+              >
+                <QRCodeSVG
+                  value={attendanceUrl}
+                  size={200}
+                  level="H"
+                  includeMargin={true}
+                />
+              </div>
+
+              <p className="text-xs text-muted-foreground mb-4">
+                امسح الرمز بواسطة كاميرا الهاتف لفتح شاشة الحضور
+              </p>
+
+              <div className="flex flex-col gap-2">
+                <Button onClick={handlePrintQR} className="w-full gap-2 text-xs">
+                  <Printer className="w-4 h-4" />
+                  طباعة QR Code
+                </Button>
+                <Button onClick={handleDownloadQR} variant="outline" className="w-full gap-2 text-xs">
+                  <Download className="w-4 h-4" />
+                  تحميل صورة الرمز (SVG)
+                </Button>
+              </div>
+            </Card>
+
+            {/* QR Security & Settings Card */}
+            <Card className="md:col-span-2 border-slate-800">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span>أمان رمز الحضور والرابط المباشر</span>
+                  <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
+                    نشط وآمن
+                  </Badge>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  الرابط مشفر برمز فريد خاص بفرع المطعم لمنع التخمين أو التلاعب
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Attendance URL Input & Copy */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">رابط صفحة الحضور العامة</Label>
+                  <div className="flex gap-2">
+                    <Input value={attendanceUrl} readOnly dir="ltr" className="font-mono text-xs" />
+                    <Button onClick={handleCopyLink} variant="outline" className="gap-1.5 shrink-0 text-xs">
+                      <Copy className="w-4 h-4" />
+                      نسخ
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Token Rotation Section */}
+                <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-100 flex items-center gap-1.5">
+                        <RefreshCw className="w-4 h-4 text-primary" />
+                        تدوير وإعادة إنشاء رمز الحضور (Token Rotation)
+                      </h4>
+                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                        في حال شعرت بتسريب رمز الـ QR أو أردت إلغاء الرمز القديم وطباعة رمز جديد للمطعم، يمكنك إعادة
+                        التدوير فوراً. ستتوقف جميع الروابط القديمة ولن تؤثر على السجلات السابقة.
+                      </p>
                     </div>
-                    <div className="hidden md:flex items-center gap-6">
-                      <div className="text-center"><p className="text-lg font-bold">{currency(employee.salary)}</p><p className="text-xs text-muted-foreground">الراتب</p></div>
-                      <div className="text-center"><p className="text-sm font-medium">{employee.hireDate}</p><p className="text-xs text-muted-foreground">تاريخ التعيين</p></div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8"><Eye className="w-4 h-4" /></Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => setEditingEmployee(employee)}>
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={async () => {
-                        if (confirm('هل أنت متأكد من حذف هذا الموظف؟')) {
-                          await deleteEmployee(employee.id);
+                    <Button
+                      onClick={async () => {
+                        if (
+                          window.confirm(
+                            'هل أنت متأكد من إعادة إنشاء رمز الحضور؟ سيتم إبطال رمز QR الحالي فوراً وتوليد رمز جديد.'
+                          )
+                        ) {
+                          await rotateQrToken();
                         }
-                      }}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                      }}
+                      variant="destructive"
+                      size="sm"
+                      className="shrink-0 gap-1.5 text-xs"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      إعادة تدوير الرمز
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Security Guarantees Checklist */}
+                <div className="space-y-2 pt-2 border-t border-slate-800">
+                  <h4 className="text-xs font-bold text-slate-300">معايير الأمان المطبقة:</h4>
+                  <ul className="text-xs text-muted-foreground space-y-1.5">
+                    <li className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      الرمز لا يحتوي على أي أرقام PIN أو بيانات حساسة للموظفين.
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      التحقق بالـ PIN محمي ضد التخمين (Rate Limiting) بحظر بعد 5 محاولات خاطئة.
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      منع الحضور المزدوج وتكرار العمليات عبر المعاملات الذرية (Transactions & Idempotency).
+                    </li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* ========================================================================= */}
+        {/* TAB 4: SHIFTS MANAGEMENT                                                  */}
+        {/* ========================================================================= */}
+        <TabsContent value="shifts" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-base font-bold text-slate-100">الورديات ومواعيد العمل</h3>
+              <p className="text-xs text-muted-foreground">تحديد مواعيد العمل وفترات السماح لحساب التأخير بدقة</p>
+            </div>
+            <Button
+              onClick={() => {
+                setEditingShift(null);
+                setShiftForm({
+                  name: '',
+                  startTime: '09:00',
+                  endTime: '17:00',
+                  gracePeriod: 10,
+                  breakMinutes: 0,
+                  days: ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'],
+                });
+                setIsAddShiftOpen(true);
+              }}
+              size="sm"
+              className="gap-2 text-xs"
+            >
+              <Plus className="w-4 h-4" />
+              وردية جديدة
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {dbShifts.map((s) => (
+              <Card key={s.id} className="relative group bg-card">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-bold text-base text-slate-100">{s.name}</h4>
+                    <Badge variant="outline" className="text-xs">
+                      سماح {s.gracePeriod ?? 10} دقيقة
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2 mb-3 text-sm text-primary font-medium">
+                    <Clock className="w-4 h-4 text-muted-foreground" />
+                    <span>{s.startTime}</span>
+                    <span className="text-muted-foreground">-</span>
+                    <span>{s.endTime}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mb-4">
+                    {(s.days || []).map((day: string) => (
+                      <Badge key={day} variant="secondary" className="text-[10px]">
+                        {day}
+                      </Badge>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-end gap-1 border-t pt-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setEditingShift(s);
+                        setShiftForm({
+                          name: s.name,
+                          startTime: s.startTime,
+                          endTime: s.endTime,
+                          gracePeriod: s.gracePeriod ?? 10,
+                          breakMinutes: s.breakMinutes ?? 0,
+                          days: s.days || [],
+                        });
+                        setIsAddShiftOpen(true);
+                      }}
+                      className="h-7 text-xs gap-1"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                      تعديل
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={async () => {
+                        if (window.confirm('هل أنت متأكد من حذف هذه الوردية؟')) {
+                          await deleteShift(s.id);
+                        }
+                      }}
+                      className="h-7 text-xs text-rose-400 hover:text-rose-300 gap-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      حذف
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
             ))}
+
+            {dbShifts.length === 0 && (
+              <div className="col-span-full py-12 text-center text-muted-foreground">
+                <Clock className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                <p>لم يتم إنشاء أي وردية بعد</p>
+              </div>
+            )}
           </div>
         </TabsContent>
 
-        <TabsContent value="attendance" className="space-y-4">
+        {/* ========================================================================= */}
+        {/* TAB 5: REPORTS & PAYROLL INTEGRATION                                      */}
+        {/* ========================================================================= */}
+        <TabsContent value="reports" className="space-y-4">
           <Card>
-            <CardHeader><CardTitle className="flex items-center justify-between flex-wrap gap-2"><span>سجل الحضور - اليوم</span><div className="flex gap-2"><Button onClick={() => setIsAddAttendanceOpen(true)} size="sm" className="gap-2"><Plus className="w-4 h-4" />إضافة حضور</Button><Button variant="outline" size="sm" className="gap-2"><Calendar className="w-4 h-4" />تغيير التاريخ</Button></div></CardTitle></CardHeader>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader><TableRow><TableHead>الموظف</TableHead><TableHead>الحضور</TableHead><TableHead>الانصراف</TableHead><TableHead>الساعات</TableHead><TableHead>الإجراءات</TableHead></TableRow></TableHeader>
-                <TableBody>
-                  {attendance.map((record) => {
-                    const emp = employees.find(e => e.id === record.employee_id);
-                    return (
-                      <TableRow key={record.id}>
-                        <TableCell className="font-medium">{emp ? emp.name : 'موظف محذوف'}</TableCell>
-                        <TableCell>{record.checkIn || '-'}</TableCell>
-                        <TableCell>{record.checkOut || '-'}</TableCell>
-                        <TableCell>{record.hours ? `${record.hours} ساعة` : '-'}</TableCell>
+            <CardHeader className="pb-3">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base">تقارير الحضور وحساب مسير الرواتب</CardTitle>
+                  <CardDescription className="text-xs">
+                    حساب ساعات العمل والتأخير والخصومات التقديرية بناءً على الحضور
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1 text-xs">
+                    <Label className="text-xs">من:</Label>
+                    <Input
+                      type="date"
+                      value={reportDateFrom}
+                      onChange={(e) => setReportDateFrom(e.target.value)}
+                      className="h-8 w-auto text-xs"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 text-xs">
+                    <Label className="text-xs">إلى:</Label>
+                    <Input
+                      type="date"
+                      value={reportDateTo}
+                      onChange={(e) => setReportDateTo(e.target.value)}
+                      className="h-8 w-auto text-xs"
+                    />
+                  </div>
+                  <Button onClick={handleExportCSV} variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+                    <Download className="w-3.5 h-3.5" />
+                    تصدير CSV
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>الموظف</TableHead>
+                      <TableHead>الراتب الأساسي</TableHead>
+                      <TableHead>أيام الحضور</TableHead>
+                      <TableHead>مرات التأخير</TableHead>
+                      <TableHead>دقائق التأخير</TableHead>
+                      <TableHead>إجمالي الساعات</TableHead>
+                      {hrSettings.late_deduction_enabled && <TableHead>خصم التأخير</TableHead>}
+                      {hrSettings.overtime_enabled && <TableHead>الإضافي</TableHead>}
+                      <TableHead className="text-left">الصافي التقديري</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {payrollReportData.map((row) => (
+                      <TableRow key={row.id}>
                         <TableCell>
-                          {!record.checkOut && (
-                             <Button size="sm" variant="outline" onClick={async () => {
-                               const out = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                               const start = new Date(`2000/01/01 ${record.checkIn}`).getTime();
-                               const end = new Date(`2000/01/01 ${out}`).getTime();
-                               const hours = Math.round((end - start) / (1000 * 60 * 60) * 10) / 10;
-                               await updateAttendance(record.id, { checkOut: out, hours: hours > 0 ? hours : 0 });
-                             }}>تسجيل انصراف</Button>
-                          )}
+                          <p className="font-bold text-sm text-slate-100">{row.name}</p>
+                          <p className="text-[11px] text-muted-foreground">{row.role}</p>
+                        </TableCell>
+                        <TableCell className="font-bold text-xs">{currency(row.salary)}</TableCell>
+                        <TableCell className="text-xs">{row.attendedDays} يوم</TableCell>
+                        <TableCell className="text-xs">{row.lateDays}</TableCell>
+                        <TableCell className="text-xs">
+                          {row.totalLateMinutes > 0 ? `${row.totalLateMinutes} دقيقة` : '-'}
+                        </TableCell>
+                        <TableCell className="text-xs font-bold text-primary">{row.totalHours} س</TableCell>
+                        {hrSettings.late_deduction_enabled && (
+                          <TableCell className="text-xs text-rose-400 font-bold">
+                            {row.lateDeductions > 0 ? `-${currency(row.lateDeductions)}` : '0'}
+                          </TableCell>
+                        )}
+                        {hrSettings.overtime_enabled && (
+                          <TableCell className="text-xs text-emerald-400 font-bold">
+                            {row.overtimeBonus > 0 ? `+${currency(row.overtimeBonus)}` : '0'}
+                          </TableCell>
+                        )}
+                        <TableCell className="text-left font-bold text-emerald-400 text-sm">
+                          {currency(row.estimatedNet)}
                         </TableCell>
                       </TableRow>
-                    );
-                  })}
-                  {attendance.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-4 text-muted-foreground">لا توجد سجلات اليوم</TableCell></TableRow>}
-                </TableBody>
-              </Table>
-            </div>
+                    ))}
+                    {payrollReportData.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                          لا توجد بيانات للفترة المحددة
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="shifts" className="space-y-4">
-          <div className="flex gap-2 items-center">
-            {shifts.length > 0 && (
-              <div className="flex items-center gap-2 px-3 border rounded-md bg-background h-10">
-                <Checkbox
-                  checked={selectedShifts.length === shifts.length}
-                  onCheckedChange={(c) => {
-                    if (c) setSelectedShifts(shifts.map((s: any) => s.id));
-                    else setSelectedShifts([]);
-                  }}
-                />
-                <span className="text-sm font-medium">الكل</span>
-              </div>
-            )}
-            {selectedShifts.length > 0 && (
-              <Button onClick={handleBulkDeleteShifts} variant="destructive" className="gap-2 shrink-0">
-                <Trash2 className="w-4 h-4" />
-                حذف ({selectedShifts.length})
-              </Button>
-            )}
-            <div className="flex justify-end flex-1"><Button className="gap-2" onClick={() => setIsAddShiftOpen(true)}><Plus className="w-4 h-4" />وردية جديدة</Button></div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {shifts.map((shift) => (
-              <Card key={shift.id} className="relative group">
-                <div className="absolute top-3 right-3" onClick={e => e.stopPropagation()}>
-                  <Checkbox
-                    checked={selectedShifts.includes(shift.id)}
-                    onCheckedChange={(c) => {
-                      if (c) setSelectedShifts(prev => [...prev, shift.id]);
-                      else setSelectedShifts(prev => prev.filter(id => id !== shift.id));
-                    }}
+        {/* ========================================================================= */}
+        {/* TAB 6: HR SETTINGS                                                        */}
+        {/* ========================================================================= */}
+        <TabsContent value="settings" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">إعدادات وقواعد الموارد البشرية والحضور</CardTitle>
+              <CardDescription className="text-xs">
+                تخصيص قواعد الحضور، التقييد الجغرافي، وفترات السماح والخصومات
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Feature Toggles */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center justify-between p-3.5 rounded-xl border bg-card">
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-100">تفعيل نظام الحضور</h4>
+                    <p className="text-xs text-muted-foreground">السماح بتسجيل الحضور والانصراف في النظام</p>
+                  </div>
+                  <Switch
+                    checked={hrSettings.attendance_enabled}
+                    onCheckedChange={(c) => updateHrSettings({ attendance_enabled: c })}
                   />
                 </div>
-                <Button variant="ghost" size="icon" className="absolute top-2 left-10 opacity-0 group-hover:opacity-100 transition-opacity text-destructive" onClick={async () => { if(confirm('تأكيد الحذف؟')) await deleteShift(shift.id); }}><Trash2 className="w-4 h-4"/></Button>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-4"><h3 className="font-bold text-lg">{shift.name}</h3><Badge variant="outline">{shift.employees || 0} موظف</Badge></div>
-                  <div className="flex items-center gap-2 mb-4 text-lg"><Clock className="w-5 h-5 text-muted-foreground" /><span className="font-medium">{shift.startTime}</span><span className="text-muted-foreground">-</span><span className="font-medium">{shift.endTime}</span></div>
-                  <div className="flex flex-wrap gap-1">{(shift.days || []).map((day: string) => (<Badge key={day} variant="secondary" className="text-xs">{day}</Badge>))}</div>
-                </CardContent>
-              </Card>
-            ))}
-            {shifts.length === 0 && <div className="col-span-full py-10 text-center text-muted-foreground">لا توجد الورديات مضافة</div>}
-          </div>
-        </TabsContent>
 
-        <TabsContent value="roles">
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><Shield className="w-5 h-5" />الأدوار والصلاحيات</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              {['مدير الفرع', 'كاشير', 'شيف', 'نادل', 'مساعد'].map((role) => (
-                <div key={role} className="p-3 md:p-4 bg-muted rounded-lg flex items-center justify-between">
-                  <div><h4 className="font-medium">{role}</h4><p className="text-sm text-muted-foreground">{employees.filter(e => e.role.includes(role.split(' ')[0])).length} موظف</p></div>
-                  <Button variant="outline" size="sm">إدارة الصلاحيات</Button>
+                <div className="flex items-center justify-between p-3.5 rounded-xl border bg-card">
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-100">تسجيل الحضور عبر QR</h4>
+                    <p className="text-xs text-muted-foreground">تمكين مسح رمز QR بواسطة أجهزة الموظفين</p>
+                  </div>
+                  <Switch
+                    checked={hrSettings.qr_attendance_enabled}
+                    onCheckedChange={(c) => updateHrSettings({ qr_attendance_enabled: c })}
+                  />
                 </div>
-              ))}
+              </div>
+
+              {/* Geofence & Location Restriction */}
+              <div className="p-4 rounded-xl border bg-slate-950/40 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-100 flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-primary" />
+                      تقييد الحضور داخل نطاق المطعم (Geofencing)
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      إلزام الموظف بأن يكون متواجداً جغرافياً داخل مسافة محددة من المطعم
+                    </p>
+                  </div>
+                  <Switch
+                    checked={hrSettings.location_restriction}
+                    onCheckedChange={(c) => updateHrSettings({ location_restriction: c })}
+                  />
+                </div>
+
+                {hrSettings.location_restriction && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-slate-800">
+                    <div className="space-y-2">
+                      <Label className="text-xs">إحداثيات المطعم (Latitude & Longitude)</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Latitude"
+                          value={hrSettings.latitude ?? ''}
+                          onChange={(e) => updateHrSettings({ latitude: parseFloat(e.target.value) || null })}
+                          className="h-9 text-xs font-mono"
+                          dir="ltr"
+                        />
+                        <Input
+                          placeholder="Longitude"
+                          value={hrSettings.longitude ?? ''}
+                          onChange={(e) => updateHrSettings({ longitude: parseFloat(e.target.value) || null })}
+                          className="h-9 text-xs font-mono"
+                          dir="ltr"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={handleCaptureCurrentGps}
+                        variant="secondary"
+                        size="sm"
+                        className="w-full gap-1.5 text-xs h-8"
+                      >
+                        <MapPin className="w-3.5 h-3.5 text-primary" />
+                        حفظ الموقع الحالي للمطعم تلقائياً
+                      </Button>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <Label>نصف القطر المسموح به (بالمتر):</Label>
+                        <span className="font-bold text-primary">{hrSettings.geofence_radius} متر</span>
+                      </div>
+                      <Slider
+                        value={[hrSettings.geofence_radius]}
+                        min={30}
+                        max={500}
+                        step={10}
+                        onValueChange={([val]) => updateHrSettings({ geofence_radius: val })}
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        نوصي بقيمة بين 50 إلى 150 متراً لتغطية مساحة المطعم بدقة
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Payroll Rules Toggles */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="flex items-center justify-between p-3.5 rounded-xl border bg-card">
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-100">تطبيق خصم التأخير</h4>
+                    <p className="text-[11px] text-muted-foreground">خصم مالي تناسبي مع دقائق التأخير</p>
+                  </div>
+                  <Switch
+                    checked={hrSettings.late_deduction_enabled}
+                    onCheckedChange={(c) => updateHrSettings({ late_deduction_enabled: c })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3.5 rounded-xl border bg-card">
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-100">خصم الانصراف المبكر</h4>
+                    <p className="text-[11px] text-muted-foreground">خصم عند الانصراف قبل نهاية الوردية</p>
+                  </div>
+                  <Switch
+                    checked={hrSettings.early_leave_deduction_enabled}
+                    onCheckedChange={(c) => updateHrSettings({ early_leave_deduction_enabled: c })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3.5 rounded-xl border bg-card">
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-100">حساب الساعات الإضافية</h4>
+                    <p className="text-[11px] text-muted-foreground">مكافأة لساعات العمل الزائدة عن الوردية</p>
+                  </div>
+                  <Switch
+                    checked={hrSettings.overtime_enabled}
+                    onCheckedChange={(c) => updateHrSettings({ overtime_enabled: c })}
+                  />
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent>
+      {/* ========================================================================= */}
+      {/* MODAL: ADD EMPLOYEE                                                       */}
+      {/* ========================================================================= */}
+      <Dialog open={isAddEmployeeOpen} onOpenChange={setIsAddEmployeeOpen}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>إضافة موظف جديد</DialogTitle>
+            <DialogDescription className="text-xs">
+              أدخل بيانات الموظف ورقم PIN السري الخاص به لتسجيل الحضور
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">الاسم</label>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label className="text-xs">الاسم الكامل *</Label>
               <Input
+                placeholder="مثال: أحمد محمد علي"
                 value={newEmployee.name}
                 onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
-                placeholder="اسم الموظف"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">الدور الوظيفي</label>
-              <Input
-                value={newEmployee.role}
-                onChange={(e) => setNewEmployee({ ...newEmployee, role: e.target.value })}
-                placeholder="(مثال: كاشير، شيف)"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">القسم</label>
-              <Input
-                value={newEmployee.department}
-                onChange={(e) => setNewEmployee({ ...newEmployee, department: e.target.value })}
-                placeholder="(مثال: المطبخ، الصالة)"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">رقم الهاتف</label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">رقم الهاتف *</Label>
                 <Input
+                  placeholder="01XXXXXXXXX"
                   value={newEmployee.phone}
                   onChange={(e) => setNewEmployee({ ...newEmployee, phone: e.target.value })}
-                  placeholder="رقم الهاتف"
                   dir="ltr"
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">الراتب (بالجنيه)</label>
+              <div className="space-y-1">
+                <Label className="text-xs">المسمى الوظيفي *</Label>
                 <Input
-                  type="number"
-                  value={newEmployee.salary}
-                  onChange={(e) => setNewEmployee({ ...newEmployee, salary: e.target.value })}
-                  placeholder="0"
+                  placeholder="مثال: كاشير، شيف"
+                  value={newEmployee.role}
+                  onChange={(e) => setNewEmployee({ ...newEmployee, role: e.target.value })}
                 />
               </div>
             </div>
-            <Button
-              className="w-full mt-4"
-              disabled={!newEmployee.name || !newEmployee.role}
-              onClick={async () => {
-                const success = await addEmployee({
-                  name: newEmployee.name,
-                  role: newEmployee.role,
-                  department: newEmployee.department,
-                  phone: newEmployee.phone,
-                  salary: Number(newEmployee.salary),
-                  hire_date: new Date().toISOString().split('T')[0],
-                  status: 'active'
-                });
-                if (success) {
-                  setIsAddOpen(false);
-                  setNewEmployee({ name: '', role: '', department: '', phone: '', salary: '' });
-                }
-              }}
-            >
-              حفظ
-            </Button>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">القسم</Label>
+                <Input
+                  placeholder="مثال: المطبخ، الصالة"
+                  value={newEmployee.department}
+                  onChange={(e) => setNewEmployee({ ...newEmployee, department: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">الراتب الأساسي</Label>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  value={newEmployee.salary}
+                  onChange={(e) => setNewEmployee({ ...newEmployee, salary: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">الوردية الافتراضية</Label>
+                <select
+                  value={newEmployee.shift_id}
+                  onChange={(e) => setNewEmployee({ ...newEmployee, shift_id: e.target.value })}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-xs"
+                >
+                  <option value="">بدون وردية محددة</option>
+                  {dbShifts.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.startTime} - {s.endTime})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">نوع التوظيف</Label>
+                <select
+                  value={newEmployee.employee_type}
+                  onChange={(e) => setNewEmployee({ ...newEmployee, employee_type: e.target.value })}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-xs"
+                >
+                  <option value="full_time">دوام كامل</option>
+                  <option value="part_time">دوام جزئي</option>
+                  <option value="contract">عقد</option>
+                  <option value="daily">يومية</option>
+                </select>
+              </div>
+            </div>
+
+            {/* PIN Input */}
+            <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-1.5">
+              <Label className="text-xs font-bold text-primary flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5" />
+                رمز PIN السري (4 أرقام لتسجيل الحضور)
+              </Label>
+              <Input
+                type="password"
+                maxLength={4}
+                placeholder="••••"
+                value={newEmployee.pin}
+                onChange={(e) => setNewEmployee({ ...newEmployee, pin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                className="text-center font-mono text-xl tracking-widest h-11"
+                dir="ltr"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                يستخدمه الموظف لتأكيد هويته عند مسح QR Code الحضور والانصراف
+              </p>
+            </div>
           </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddEmployeeOpen(false)}>
+              إلغاء
+            </Button>
+            <Button onClick={handleSaveEmployee} disabled={!newEmployee.name || !newEmployee.role}>
+              حفظ الموظف
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
-      
+
+      {/* ========================================================================= */}
+      {/* MODAL: EDIT EMPLOYEE                                                      */}
+      {/* ========================================================================= */}
       <Dialog open={!!editingEmployee} onOpenChange={(open) => !open && setEditingEmployee(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>تعديل بيانات الموظف</DialogTitle>
           </DialogHeader>
           {editingEmployee && (
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">الاسم</label>
+            <div className="space-y-3 py-2">
+              <div className="space-y-1">
+                <Label className="text-xs">الاسم الكامل</Label>
                 <Input
                   value={editingEmployee.name}
                   onChange={(e) => setEditingEmployee({ ...editingEmployee, name: e.target.value })}
-                  placeholder="اسم الموظف"
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">الدور الوظيفي</label>
-                <Input
-                  value={editingEmployee.role}
-                  onChange={(e) => setEditingEmployee({ ...editingEmployee, role: e.target.value })}
-                  placeholder="(مثال: كاشير، شيف)"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">القسم</label>
-                <Input
-                  value={editingEmployee.department}
-                  onChange={(e) => setEditingEmployee({ ...editingEmployee, department: e.target.value })}
-                  placeholder="(مثال: المطبخ، الصالة)"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">رقم الهاتف</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">رقم الهاتف</Label>
                   <Input
                     value={editingEmployee.phone}
                     onChange={(e) => setEditingEmployee({ ...editingEmployee, phone: e.target.value })}
-                    placeholder="رقم الهاتف"
                     dir="ltr"
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">الراتب (بالجنيه)</label>
+                <div className="space-y-1">
+                  <Label className="text-xs">المسمى الوظيفي</Label>
+                  <Input
+                    value={editingEmployee.role}
+                    onChange={(e) => setEditingEmployee({ ...editingEmployee, role: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">القسم</Label>
+                  <Input
+                    value={editingEmployee.department}
+                    onChange={(e) => setEditingEmployee({ ...editingEmployee, department: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">الراتب الأساسي</Label>
                   <Input
                     type="number"
                     value={editingEmployee.salary}
                     onChange={(e) => setEditingEmployee({ ...editingEmployee, salary: e.target.value })}
-                    placeholder="0"
                   />
                 </div>
               </div>
-              <Button
-                className="w-full mt-4"
-                disabled={!editingEmployee.name || !editingEmployee.role}
-                onClick={async () => {
-                  const success = await updateEmployee(editingEmployee.id, {
-                    name: editingEmployee.name,
-                    role: editingEmployee.role,
-                    department: editingEmployee.department,
-                    phone: editingEmployee.phone,
-                    salary: Number(editingEmployee.salary),
-                  });
-                  if (success) {
-                    setEditingEmployee(null);
-                  }
-                }}
-              >
-                تحديث
-              </Button>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">حالة الموظف</Label>
+                  <select
+                    value={editingEmployee.status}
+                    onChange={(e) => setEditingEmployee({ ...editingEmployee, status: e.target.value })}
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 text-xs"
+                  >
+                    <option value="active">نشط</option>
+                    <option value="inactive">غير نشط</option>
+                    <option value="on_leave">إجازة</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">الوردية</Label>
+                  <select
+                    value={editingEmployee.shiftId || ''}
+                    onChange={(e) => setEditingEmployee({ ...editingEmployee, shiftId: e.target.value })}
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 text-xs"
+                  >
+                    <option value="">بدون وردية محددة</option>
+                    {dbShifts.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingEmployee(null)}>
+              إلغاء
+            </Button>
+            <Button onClick={handleUpdateEmployee}>حفظ التعديلات</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ========================================================================= */}
+      {/* MODAL: CHANGE PIN                                                         */}
+      {/* ========================================================================= */}
+      <Dialog open={!!pinChangeEmployee} onOpenChange={(open) => !open && setPinChangeEmployee(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-amber-400" />
+              تعيين رقم PIN السري
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              للموظف: <span className="font-bold text-slate-100">{pinChangeEmployee?.name}</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">أدخل PIN الجديد (4 أرقام)</Label>
+              <Input
+                type="password"
+                maxLength={4}
+                placeholder="••••"
+                value={newPinValue}
+                onChange={(e) => setNewPinValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                className="text-center font-mono text-2xl tracking-widest h-12"
+                dir="ltr"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">تأكيد PIN الجديد</Label>
+              <Input
+                type="password"
+                maxLength={4}
+                placeholder="••••"
+                value={confirmPinValue}
+                onChange={(e) => setConfirmPinValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                className="text-center font-mono text-2xl tracking-widest h-12"
+                dir="ltr"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPinChangeEmployee(null)}>
+              إلغاء
+            </Button>
+            <Button onClick={handleSavePin} disabled={newPinValue.length !== 4 || newPinValue !== confirmPinValue}>
+              تأكيد وحفظ PIN
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ========================================================================= */}
+      {/* MODAL: EMPLOYEE PROFILE & ATTENDANCE HISTORY                              */}
+      {/* ========================================================================= */}
+      <Dialog open={!!profileEmployee} onOpenChange={(open) => !open && setProfileEmployee(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              <Avatar className="w-10 h-10 border border-slate-700">
+                <AvatarFallback className="bg-primary/20 text-primary font-bold">
+                  {profileEmployee?.name.charAt(0)}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <span className="text-lg font-bold">{profileEmployee?.name}</span>
+                <span className="block text-xs text-muted-foreground font-normal">
+                  {profileEmployee?.role} • {profileEmployee?.department}
+                </span>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+
+          {profileEmployee && (
+            <div className="space-y-4 py-2">
+              {/* Profile Stats Cards */}
+              {(() => {
+                const empRecords = attendance.filter((a) => a.employeeId === profileEmployee.id);
+                const attended = empRecords.filter((a) => a.status === 'present' || a.status === 'late').length;
+                const late = empRecords.filter((a) => a.status === 'late').length;
+                const lateMins = empRecords.reduce((s, a) => s + a.lateMinutes, 0);
+                const totalHours = empRecords.reduce((s, a) => s + a.hours, 0);
+
+                return (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
+                        <p className="text-lg font-bold text-emerald-400">{attended} يوم</p>
+                        <p className="text-[10px] text-muted-foreground">أيام الحضور</p>
+                      </div>
+                      <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
+                        <p className="text-lg font-bold text-amber-400">{late} مرة</p>
+                        <p className="text-[10px] text-muted-foreground">مرات التأخير</p>
+                      </div>
+                      <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
+                        <p className="text-lg font-bold text-amber-400">{lateMins} د</p>
+                        <p className="text-[10px] text-muted-foreground">إجمالي التأخير</p>
+                      </div>
+                      <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
+                        <p className="text-lg font-bold text-primary">{Math.round(totalHours * 10) / 10} س</p>
+                        <p className="text-[10px] text-muted-foreground">ساعات العمل</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 pt-2">
+                      <h4 className="text-xs font-bold text-slate-300">سجل الحضور التاريخي للموظف</h4>
+                      <div className="max-h-60 overflow-y-auto rounded-lg border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>التاريخ</TableHead>
+                              <TableHead>الحضور</TableHead>
+                              <TableHead>الانصراف</TableHead>
+                              <TableHead>الساعات</TableHead>
+                              <TableHead>التأخير</TableHead>
+                              <TableHead>الحالة</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {empRecords.map((r) => (
+                              <TableRow key={r.id}>
+                                <TableCell className="font-mono text-xs">{r.date}</TableCell>
+                                <TableCell className="font-mono text-xs">{r.checkIn || '-'}</TableCell>
+                                <TableCell className="font-mono text-xs">{r.checkOut || '-'}</TableCell>
+                                <TableCell className="text-xs">{r.hours > 0 ? `${r.hours} س` : '-'}</TableCell>
+                                <TableCell className="text-xs">
+                                  {r.lateMinutes > 0 ? `${r.lateMinutes} د` : '-'}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge className={cn('text-[9px] border', statusColors[r.status])}>
+                                    {statusLabels[r.status] || r.status}
+                                  </Badge>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {empRecords.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                                  لا توجد سجلات حضور لهذا الموظف حتى الآن
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isAddAttendanceOpen} onOpenChange={setIsAddAttendanceOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>تسجيل حضور موظف</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">اسم الموظف</label>
-              <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  value={newAttendance.employee_id} onChange={e => setNewAttendance({...newAttendance, employee_id: e.target.value})}>
-                <option value="">-- اختر الموظف --</option>
-                {employees.map(e => (
-                  <option key={e.id} value={e.id}>{e.name} ({e.role})</option>
+      {/* ========================================================================= */}
+      {/* MODAL: MANUAL ATTENDANCE CORRECTION                                       */}
+      {/* ========================================================================= */}
+      <Dialog open={correctionModalOpen} onOpenChange={setCorrectionModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {correctionRecord ? 'تصحيح وتعديل سجل الحضور' : 'إضافة حضور يدوي'}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              سيتم توثيق هذا الإجراء وسببه في سجل التدقيق (Audit Log) الخاص بالنظام
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label className="text-xs">الموظف *</Label>
+              <select
+                value={correctionForm.employee_id}
+                onChange={(e) => setCorrectionForm({ ...correctionForm, employee_id: e.target.value })}
+                className="w-full h-10 rounded-md border border-input bg-background px-3 text-xs"
+              >
+                {employees.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name} ({e.role})
+                  </option>
                 ))}
               </select>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">وقت الحضور</label>
-              <Input type="time" value={newAttendance.checkIn} onChange={e => setNewAttendance({...newAttendance, checkIn: e.target.value})} />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">التاريخ *</Label>
+                <Input
+                  type="date"
+                  value={correctionForm.date}
+                  onChange={(e) => setCorrectionForm({ ...correctionForm, date: e.target.value })}
+                  className="h-10 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">الحالة</Label>
+                <select
+                  value={correctionForm.status}
+                  onChange={(e) => setCorrectionForm({ ...correctionForm, status: e.target.value })}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-xs"
+                >
+                  <option value="present">حاضر</option>
+                  <option value="late">متأخر</option>
+                  <option value="early_leave">انصراف مبكر</option>
+                  <option value="on_leave">إجازة</option>
+                  <option value="absent">غائب</option>
+                </select>
+              </div>
             </div>
-            <Button className="w-full" disabled={!newAttendance.employee_id || !newAttendance.checkIn} onClick={async () => {
-              const s = await addAttendance({ ...newAttendance, date: new Date().toISOString().split('T')[0] });
-              if (s) { setIsAddAttendanceOpen(false); setNewAttendance({ employee_id: '', checkIn: '', status: 'present' }); }
-            }}>حفظ</Button>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">وقت الحضور (HH:mm)</Label>
+                <Input
+                  type="time"
+                  value={correctionForm.checkIn}
+                  onChange={(e) => setCorrectionForm({ ...correctionForm, checkIn: e.target.value })}
+                  className="h-10 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">وقت الانصراف (HH:mm)</Label>
+                <Input
+                  type="time"
+                  value={correctionForm.checkOut}
+                  onChange={(e) => setCorrectionForm({ ...correctionForm, checkOut: e.target.value })}
+                  className="h-10 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-rose-400 font-bold">سبب التعديل اليدوي (إجباري للتسجيل) *</Label>
+              <Input
+                placeholder="مثال: نسي تسجيل الانصراف أثناء ضغط العمل"
+                value={correctionForm.reason}
+                onChange={(e) => setCorrectionForm({ ...correctionForm, reason: e.target.value })}
+                className="h-10 text-xs"
+              />
+            </div>
           </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCorrectionModalOpen(false)}>
+              إلغاء
+            </Button>
+            <Button onClick={handleSaveCorrection} disabled={!correctionForm.reason.trim()}>
+              حفظ وتوثيق
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* ========================================================================= */}
+      {/* MODAL: ADD / EDIT SHIFT                                                   */}
+      {/* ========================================================================= */}
       <Dialog open={isAddShiftOpen} onOpenChange={setIsAddShiftOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>إضافة وردية جديدة</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2"><label className="text-sm font-medium">اسم الوردية</label><Input value={newShift.name} onChange={e => setNewShift({...newShift, name: e.target.value})} placeholder="مثال: وردية الصباح" /></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><label className="text-sm font-medium">من الساعة</label><Input type="time" value={newShift.startTime} onChange={e => setNewShift({...newShift, startTime: e.target.value})} /></div>
-              <div className="space-y-2"><label className="text-sm font-medium">إلى الساعة</label><Input type="time" value={newShift.endTime} onChange={e => setNewShift({...newShift, endTime: e.target.value})} /></div>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingShift ? 'تعديل الوردية' : 'إضافة وردية جديدة'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label className="text-xs">اسم الوردية *</Label>
+              <Input
+                placeholder="مثال: الوردية الصباحية"
+                value={shiftForm.name}
+                onChange={(e) => setShiftForm({ ...shiftForm, name: e.target.value })}
+              />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">عدد الموظفين المتوقع</label>
-              <Input type="number" value={newShift.employees} onChange={e => setNewShift({...newShift, employees: parseInt(e.target.value) || 0})} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">وقت البداية *</Label>
+                <Input
+                  type="time"
+                  value={shiftForm.startTime}
+                  onChange={(e) => setShiftForm({ ...shiftForm, startTime: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">وقت النهاية *</Label>
+                <Input
+                  type="time"
+                  value={shiftForm.endTime}
+                  onChange={(e) => setShiftForm({ ...shiftForm, endTime: e.target.value })}
+                />
+              </div>
             </div>
-            <Button className="w-full" disabled={!newShift.name || !newShift.startTime || !newShift.endTime} onClick={async () => {
-              const s = await addShift(newShift);
-              if (s) { setIsAddShiftOpen(false); setNewShift({ name: '', startTime: '', endTime: '', employees: 0, days: [] }); }
-            }}>حفظ التغييرات</Button>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">فترة السماح بالدقائق (Grace Period)</Label>
+                <Input
+                  type="number"
+                  value={shiftForm.gracePeriod}
+                  onChange={(e) => setShiftForm({ ...shiftForm, gracePeriod: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">مدة الراحة (دقائق)</Label>
+                <Input
+                  type="number"
+                  value={shiftForm.breakMinutes}
+                  onChange={(e) => setShiftForm({ ...shiftForm, breakMinutes: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">أيام عمل الوردية</Label>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'].map((day) => {
+                  const isChecked = shiftForm.days.includes(day);
+                  return (
+                    <Badge
+                      key={day}
+                      variant={isChecked ? 'default' : 'outline'}
+                      onClick={() => {
+                        const nextDays = isChecked
+                          ? shiftForm.days.filter((d) => d !== day)
+                          : [...shiftForm.days, day];
+                        setShiftForm({ ...shiftForm, days: nextDays });
+                      }}
+                      className="cursor-pointer text-xs"
+                    >
+                      {day}
+                    </Badge>
+                  );
+                })}
+              </div>
+            </div>
           </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddShiftOpen(false)}>
+              إلغاء
+            </Button>
+            <Button onClick={handleSaveShift}>حفظ الوردية</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
-
     </MainLayout>
   );
 }

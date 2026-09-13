@@ -38,6 +38,7 @@ import Shifts from "./pages/Shifts";
 import Maintenance from "./pages/Maintenance";
 import Accounting from "./pages/Accounting";
 import CallCenter from "./pages/CallCenter";
+import AttendancePublic from "./pages/AttendancePublic";
 import { Shield } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -102,6 +103,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
+      <Route path="/attendance" element={<AttendancePublic />} />
       <Route path="/" element={<ProtectedRoute requiredPerms={['dashboard.view']}><Dashboard /></ProtectedRoute>} />
       <Route path="/pos" element={<ProtectedRoute requiredPerms={['pos.view']}><POS /></ProtectedRoute>} />
       <Route path="/orders-history" element={<ProtectedRoute requiredPerms={['pos.view']}><OrdersHistory /></ProtectedRoute>} />
