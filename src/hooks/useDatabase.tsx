@@ -52,11 +52,22 @@ export function useTenantBranch() {
           
           let resolvedBranchId = profile.branch_id;
           let branchName = 'الفرع الرئيسي';
+          let branchAddress = '';
+          let branchPhone = '';
+          let branchOpeningTime = '08:00';
+          let branchClosingTime = '23:00';
 
           if (profile.branch_id) {
             setBranchId(profile.branch_id);
             const bDoc = await getDoc(doc(db, 'branches', profile.branch_id));
-            if (bDoc.exists()) branchName = bDoc.data().name;
+            if (bDoc.exists()) {
+              const bData = bDoc.data();
+              branchName = bData.name || 'الفرع الرئيسي';
+              branchAddress = bData.address || '';
+              branchPhone = bData.phone || '';
+              branchOpeningTime = bData.opening_time || '08:00';
+              branchClosingTime = bData.closing_time || '23:00';
+            }
           } else {
             // Get first branch
             const q = query(collection(db, 'branches'), where('tenant_id', '==', profile.tenant_id), fsLimit(1));
@@ -65,10 +76,22 @@ export function useTenantBranch() {
               const bId = branchSnap.docs[0].id;
               setBranchId(bId);
               resolvedBranchId = bId;
-              branchName = branchSnap.docs[0].data().name;
+              const bData = branchSnap.docs[0].data();
+              branchName = bData.name || 'الفرع الرئيسي';
+              branchAddress = bData.address || '';
+              branchPhone = bData.phone || '';
+              branchOpeningTime = bData.opening_time || '08:00';
+              branchClosingTime = bData.closing_time || '23:00';
             } else {
               // Create default branch
-              const newBranch = await addDoc(collection(db, 'branches'), { tenant_id: profile.tenant_id, name: 'الفرع الرئيسي' });
+              const newBranch = await addDoc(collection(db, 'branches'), { 
+                tenant_id: profile.tenant_id, 
+                name: 'الفرع الرئيسي',
+                address: '',
+                phone: '',
+                opening_time: '08:00',
+                closing_time: '23:00'
+              });
               setBranchId(newBranch.id);
               await updateDoc(profileRef, { branch_id: newBranch.id });
               resolvedBranchId = newBranch.id;
@@ -79,7 +102,13 @@ export function useTenantBranch() {
           const tenantSnap = await getDoc(doc(db, 'tenants', profile.tenant_id));
           if (tenantSnap.exists()) {
             const tData = tenantSnap.data();
-            useAppStore.getState().setCurrentTenant({ id: profile.tenant_id, name: tData.name });
+            useAppStore.getState().setCurrentTenant({ 
+              id: profile.tenant_id, 
+              name: tData.name || 'MK',
+              nameEn: tData.name_en || '',
+              taxNumber: tData.tax_number || '',
+              logo: tData.logo || ''
+            });
             if (tData.settings) {
               useAppStore.getState().updateSettings(tData.settings);
             }
@@ -90,8 +119,10 @@ export function useTenantBranch() {
               id: resolvedBranchId, 
               tenantId: profile.tenant_id, 
               name: branchName, 
-              address: '', 
-              phone: '', 
+              address: branchAddress, 
+              phone: branchPhone, 
+              openingTime: branchOpeningTime,
+              closingTime: branchClosingTime,
               isActive: true 
             });
           }
@@ -1970,6 +2001,27 @@ export function useSettings(tenantId: string | null) {
     }
   };
 
+  const updateTenantProfile = async (data: { name?: string; name_en?: string; tax_number?: string; settings?: any }) => {
+    if (!tenantId) return false;
+    try {
+      await updateDoc(doc(db, 'tenants', tenantId), data);
+      return true;
+    } catch (e: any) {
+      toast.error('خطأ في حفظ بيانات المؤسسة: ' + e.message);
+      return false;
+    }
+  };
+
+  const updateBranchProfile = async (branchId: string, data: { name?: string; phone?: string; address?: string; opening_time?: string; closing_time?: string }) => {
+    try {
+      await updateDoc(doc(db, 'branches', branchId), data);
+      return true;
+    } catch (e: any) {
+      toast.error('خطأ في حفظ بيانات الفرع: ' + e.message);
+      return false;
+    }
+  };
+
   const wipeAllTenantData = async (activeBranchId?: string | null) => {
     if (!tenantId) return false;
     try {
@@ -2094,5 +2146,5 @@ export function useSettings(tenantId: string | null) {
     }
   };
 
-  return { updateTenantSettings, wipeAllTenantData };
+  return { updateTenantSettings, updateTenantProfile, updateBranchProfile, wipeAllTenantData };
 }

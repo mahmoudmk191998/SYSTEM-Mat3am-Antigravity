@@ -5,6 +5,8 @@ import { persist } from 'zustand/middleware';
 export interface Tenant {
   id: string;
   name: string;
+  nameEn?: string;
+  taxNumber?: string;
   logo?: string;
 }
 
@@ -15,6 +17,8 @@ export interface Branch {
   address: string;
   phone: string;
   isActive: boolean;
+  openingTime?: string;
+  closingTime?: string;
 }
 
 export interface User {
