@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Clock, Plus, Edit, Trash2, Search, Eye, Printer, DollarSign, Activity, Users, Wallet, TrendingUp, AlertCircle, Timer, CheckCircle2 } from "lucide-react";
+import { Clock, Plus, Edit, Trash2, Search, Eye, Printer, DollarSign, Activity, Users, Wallet, TrendingUp, AlertCircle, Timer, CheckCircle2, ChevronRight, Calendar, ArrowRight } from "lucide-react";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -62,108 +62,102 @@ export default function Shifts() {
   const [shiftExpenses, setShiftExpenses] = useState<any[]>([]);
   const [loadingShiftDetails, setLoadingShiftDetails] = useState(false);
 
-  const [searchQuery, setSearchQuery] = useState('');
+  // Form State
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingShift, setEditingShift] = useState<any>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Form states
   const [employeeName, setEmployeeName] = useState('');
   const [shiftType, setShiftType] = useState('morning');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const printReportRef = useRef<HTMLDivElement>(null);
-
-  const fetchShifts = async () => {
-    if (!branchId) return;
-    setLoading(true);
-    try {
-      const q = query(collection(db, 'branch_shifts'), where('branch_id', '==', branchId));
-      const snap = await getDocs(q);
-      const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-      items.sort((a, b) => {
-        const d1 = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const d2 = b.created_at ? new Date(b.created_at).getTime() : 0;
-        return d2 - d1;
-      });
-      setShifts(items);
-    } catch (e) {
-      console.error('Error fetching HR shifts:', e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Fetch POS cashier shifts
   const fetchPosShifts = async () => {
     if (!branchId) return;
     setLoadingPosShifts(true);
     try {
-      const q = query(collection(db, 'pos_shifts'), where('branch_id', '==', branchId));
-      const snap = await getDocs(q);
-      const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-      
-      // Sort descending by start time
-      items.sort((a, b) => {
-         const t1 = a.start_time ? new Date(a.start_time).getTime() : 0;
-         const t2 = b.start_time ? new Date(b.start_time).getTime() : 0;
-         return t2 - t1; 
-      });
-      setPosShifts(items);
-    } catch(e) {
-      console.error('Error fetching pos shifts', e);
+      const q = query(
+        collection(db, 'pos_shifts'),
+        where('branch_id', '==', branchId)
+      );
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      // Sort client-side descending by start_time
+      data.sort((a: any, b: any) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
+      setPosShifts(data);
+    } catch (e) {
+      console.error("Error fetching pos shifts", e);
+      toast({ title: 'خطأ', description: 'فشل في تحميل ورديات الكاشير', variant: 'destructive' });
     } finally {
       setLoadingPosShifts(false);
     }
   };
 
+  // Fetch Employee scheduled shifts
+  const fetchShifts = async () => {
+    if (!branchId) return;
+    setLoading(true);
+    try {
+      const q = query(
+        collection(db, 'branch_shifts'),
+        where('branch_id', '==', branchId)
+      );
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setShifts(data);
+    } catch (e) {
+      console.error("Error fetching shifts", e);
+      toast({ title: 'خطأ', description: 'فشل في تحميل مواعيد الموظفين', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetchShifts();
-    fetchPosShifts();
+    if (branchId) {
+      fetchShifts();
+      fetchPosShifts();
+    }
   }, [branchId]);
 
-  const filteredShifts = shifts.filter(s => 
-    (s.employee_name || '').includes(searchQuery)
-  );
-  
-  const filteredPosShifts = posShifts.filter(s => 
-    (s.cashier_name || '').includes(searchQuery)
-  );
-
-  // Analytics Calculations
+  // Analytics Metrics
   const activePosShifts = posShifts.filter(s => s.status === 'active').length;
   
-  const today = new Date();
-  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  const endOfToday = startOfToday + 86400000;
+  // Today's total pos sales
+  const today = new Date().toISOString().split('T')[0];
+  const todayPosShifts = posShifts.filter(s => s.start_time && s.start_time.startsWith(today));
+  const todayTotalSales = todayPosShifts.reduce((acc, s) => {
+    const shiftSales = s.total_sales != null ? s.total_sales : ((s.cash_sales || 0) + (s.card_sales || 0) + (s.wallet_sales || 0));
+    return acc + shiftSales;
+  }, 0);
+  const todayTotalCash = todayPosShifts.reduce((acc, s) => acc + (s.actual_cash || s.cash_sales || 0), 0);
+  const todayDiscrepancy = todayPosShifts.reduce((acc, s) => acc + (s.discrepancy || 0), 0);
 
-  const todayPosShifts = posShifts.filter(s => {
-    // Consider a shift "Today's" if it's active, started today, or ended today
-    const startTimeTs = s.start_time ? new Date(s.start_time).getTime() : 0;
-    const isStartedToday = startTimeTs >= startOfToday && startTimeTs < endOfToday;
-    
-    const endTimeTs = s.end_time ? new Date(s.end_time).getTime() : 0;
-    const isEndedToday = endTimeTs >= startOfToday && endTimeTs < endOfToday;
-
-    return isStartedToday || isEndedToday || s.status === 'active';
+  // Filtered Lists
+  const filteredPosShifts = posShifts.filter(shift => {
+    const q = searchQuery.toLowerCase();
+    const cashierMatch = (shift.cashier_name || '').toLowerCase().includes(q);
+    const statusMatch = (shift.status === 'active' ? 'مفتوحة' : 'مغلقة').includes(q);
+    return cashierMatch || statusMatch;
   });
-  
-  const todayTotalCash = todayPosShifts.reduce((sum, s) => {
-     // Active shifts might not have actual_cash settled yet, so we use their running cash_sales
-     const cash = s.status === 'closed' ? Number(s.actual_cash || 0) : Number(s.cash_sales || 0);
-     return sum + cash;
-  }, 0);
 
-  const todayTotalSales = todayPosShifts.reduce((sum, s) => {
-     const sales = s.total_sales != null ? Number(s.total_sales) : (Number(s.cash_sales) || 0) + (Number(s.card_sales) || 0) + (Number(s.wallet_sales) || 0);
-     return sum + sales;
-  }, 0);
-  
-  const todayDiscrepancy = todayPosShifts.reduce((sum, s) => sum + (Number(s.discrepancy) || 0), 0);
+  const filteredShifts = shifts.filter(shift => {
+    const q = searchQuery.toLowerCase();
+    const nameMatch = (shift.employee_name || '').toLowerCase().includes(q);
+    const roleMatch = (shift.role || '').toLowerCase().includes(q);
+    return nameMatch || roleMatch;
+  });
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!employeeName || !startTime || !endTime) return;
+    if (!branchId) return;
     setIsSubmitting(true);
     try {
       const selectedEmp = dbEmployees.find(e => e.name === employeeName);
@@ -249,43 +243,47 @@ export default function Shifts() {
     setLoadingShiftDetails(true);
     setShiftOrders([]);
     setShiftExpenses([]);
-    
+
     try {
-      const ordersQ = query(collection(db, 'orders'), where('shift_id', '==', shift.id));
+      // 1. Fetch Orders for this shift if shift_id exists
+      const ordersQ = query(
+        collection(db, 'orders'),
+        where('shift_id', '==', shift.id)
+      );
       const ordersSnap = await getDocs(ordersQ);
-      const ordersData = ordersSnap.docs.map(d => ({ id: d.id, ...d.data() as any, payments: [] }));
+      const fetchedOrders = ordersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setShiftOrders(fetchedOrders);
 
-      if (ordersData.length > 0) {
-        await Promise.all(ordersData.map(async (o) => {
-          const pQ = query(collection(db, 'payments'), where('order_id', '==', o.id));
-          const pSnap = await getDocs(pQ);
-          o.payments = pSnap.docs.map(d => d.data());
-        }));
-      }
-      setShiftOrders(ordersData);
+      // 2. Fetch Expenses for this shift
+      const expensesQ = query(
+        collection(db, 'expenses'),
+        where('shift_id', '==', shift.id)
+      );
+      const expensesSnap = await getDocs(expensesQ);
+      const fetchedExpenses = expensesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setShiftExpenses(fetchedExpenses);
 
-      const expensesQ = query(collection(db, 'expenses'), where('shift_id', '==', shift.id));
-      const expSnap = await getDocs(expensesQ);
-      setShiftExpenses(expSnap.docs.map(d => d.data() as any));
-    } catch (e) {
-      console.error('Error fetching shift details:', e);
+    } catch (error) {
+      console.error("Error fetching shift full details:", error);
+      toast({ title: 'تنبيه', description: 'تعذر جلب جميع تفاصيل العمليات للوردية', variant: 'destructive' });
     } finally {
       setLoadingShiftDetails(false);
     }
   };
 
-  const confirmedShiftOrders = shiftOrders.filter(o => ['ready', 'completed', 'delivered'].includes(o.status));
-  const deliveryCount = confirmedShiftOrders.filter(o => o.order_type === 'delivery').length;
-  const takeawayCount = confirmedShiftOrders.filter(o => o.order_type === 'takeaway').length;
-  const dineinCount = confirmedShiftOrders.filter(o => o.order_type === 'dine_in').length;
-  const totalDeliveryFees = confirmedShiftOrders.reduce((sum, o) => sum + Number(o.delivery_fee || o.deliveryFee || 0), 0);
-  
+  const confirmedShiftOrders = shiftOrders.filter(o => o.status !== 'cancelled');
+  const deliveryCount = confirmedShiftOrders.filter(o => o.order_type === 'delivery' || o.type === 'delivery').length;
+  const takeawayCount = confirmedShiftOrders.filter(o => o.order_type === 'takeaway' || o.type === 'takeaway').length;
+  const dineinCount = confirmedShiftOrders.filter(o => o.order_type === 'dine_in' || o.type === 'dine_in').length;
+  const totalDeliveryFees = confirmedShiftOrders.reduce((sum, o) => sum + (Number(o.delivery_fee) || 0), 0);
+
+  // Print Thermal Z-Report
   const handlePrintReport = () => {
     if (!viewingShift) return;
-    
-    const w = window.open('', '', 'width=400,height=600');
+
+    const w = window.open('', '_blank', 'width=350,height=600');
     if (!w) {
-      toast({ title: 'خطأ', description: 'الرجاء السماح بالنوافذ المنبثقة للطباعة', variant: 'destructive' });
+      toast({ title: 'خطأ', description: 'تعذر فتح نافذة الطباعة', variant: 'destructive' });
       return;
     }
 
@@ -386,31 +384,31 @@ export default function Shifts() {
       subtitle="مراقبة الورديات النقدية والتقارير المالية ومواعيد الموظفين."
       actions={
         <div className="relative w-full sm:w-64">
-          <Search className="absolute right-2 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="بحث..."
-            className="pr-8"
+            placeholder="بحث بالكاشير أو الحالة..."
+            className="pr-9 w-full text-base sm:text-sm h-10 rounded-xl"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
       }
     >
-      <div className="grid gap-6 pb-20">
+      <div className="grid gap-4 sm:gap-6 pb-20">
         
         {/* Analytics Widgets */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
             <Card className="hover:shadow-md transition-all border-none shadow-sm relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-1">الورديات المفتوحة</p>
-                    <h3 className="text-3xl font-black">{activePosShifts}</h3>
+              <CardContent className="p-4 sm:p-5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1 truncate">الورديات المفتوحة</p>
+                    <h3 className="text-2xl sm:text-3xl font-black truncate">{activePosShifts}</h3>
                   </div>
-                  <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400 group-hover:scale-110 transition-transform shadow-sm">
-                    <Activity className="w-6 h-6" />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400 group-hover:scale-110 transition-transform shadow-sm">
+                    <Activity className="w-5 h-5 sm:w-6 sm:h-6" />
                   </div>
                 </div>
               </CardContent>
@@ -420,14 +418,14 @@ export default function Shifts() {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             <Card className="hover:shadow-md transition-all border-none shadow-sm relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-1">مبيعات ورديات اليوم</p>
-                    <h3 className="text-2xl font-black">{formatCurrency(todayTotalSales)}</h3>
+              <CardContent className="p-4 sm:p-5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1 truncate">مبيعات ورديات اليوم</p>
+                    <h3 className="text-xl sm:text-2xl font-black truncate">{formatCurrency(todayTotalSales)}</h3>
                   </div>
-                  <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform shadow-sm">
-                    <TrendingUp className="w-6 h-6" />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform shadow-sm">
+                    <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6" />
                   </div>
                 </div>
               </CardContent>
@@ -437,14 +435,14 @@ export default function Shifts() {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
             <Card className="hover:shadow-md transition-all border-none shadow-sm relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-1">التحصيل النقدي الفعلي</p>
-                    <h3 className="text-2xl font-black">{formatCurrency(todayTotalCash)}</h3>
+              <CardContent className="p-4 sm:p-5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1 truncate">التحصيل النقدي الفعلي</p>
+                    <h3 className="text-xl sm:text-2xl font-black truncate">{formatCurrency(todayTotalCash)}</h3>
                   </div>
-                  <div className="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform shadow-sm">
-                    <Wallet className="w-6 h-6" />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform shadow-sm">
+                    <Wallet className="w-5 h-5 sm:w-6 sm:h-6" />
                   </div>
                 </div>
               </CardContent>
@@ -454,21 +452,21 @@ export default function Shifts() {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
              <Card className="hover:shadow-md transition-all border-none shadow-sm relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-orange-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-1">العجز والزيادة (اليوم)</p>
-                    <h3 className={`text-2xl font-black ${todayDiscrepancy < 0 ? 'text-red-500' : todayDiscrepancy > 0 ? 'text-green-500' : ''}`} dir="ltr">
+              <CardContent className="p-4 sm:p-5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1 truncate">العجز والزيادة (اليوم)</p>
+                    <h3 className={`text-xl sm:text-2xl font-black truncate ${todayDiscrepancy < 0 ? 'text-red-500' : todayDiscrepancy > 0 ? 'text-green-500' : ''}`} dir="ltr">
                       {todayDiscrepancy > 0 ? '+' : ''}{formatCurrency(todayDiscrepancy)}
                     </h3>
                   </div>
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm ${
+                  <div className={`w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm ${
                     todayDiscrepancy < 0 
                       ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' 
                       : todayDiscrepancy > 0 ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
                       : 'bg-gray-100 dark:bg-gray-800 text-gray-500'
                   }`}>
-                    {todayDiscrepancy < 0 ? <AlertCircle className="w-6 h-6" /> : <DollarSign className="w-6 h-6" />}
+                    {todayDiscrepancy < 0 ? <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6" /> : <DollarSign className="w-5 h-5 sm:w-6 sm:h-6" />}
                   </div>
                 </div>
               </CardContent>
@@ -476,31 +474,40 @@ export default function Shifts() {
           </motion.div>
         </div>
 
-        <Tabs defaultValue="pos_shifts" className="space-y-6">
-          <TabsList className="bg-background border">
-            <TabsTrigger value="pos_shifts" className="gap-2">
-              <DollarSign className="w-4 h-4" /> ورديات الكاشير (النقدية)
+        <Tabs defaultValue="pos_shifts" className="space-y-4 sm:space-y-6">
+          <TabsList className="grid grid-cols-2 w-full max-w-md h-auto p-1 bg-muted/40 border rounded-xl">
+            <TabsTrigger value="pos_shifts" className="gap-1.5 sm:gap-2 py-2 px-2 text-xs sm:text-sm font-semibold rounded-lg data-[state=active]:shadow-sm">
+              <DollarSign className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate">ورديات الكاشير</span>
             </TabsTrigger>
-            <TabsTrigger value="employee_shifts" className="gap-2">
-              <Clock className="w-4 h-4" /> مواعيد الموظفين
+            <TabsTrigger value="employee_shifts" className="gap-1.5 sm:gap-2 py-2 px-2 text-xs sm:text-sm font-semibold rounded-lg data-[state=active]:shadow-sm">
+              <Clock className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate">مواعيد الموظفين</span>
             </TabsTrigger>
           </TabsList>
 
+          {/* POS Shifts Tab */}
           <TabsContent value="pos_shifts">
-            <Card>
-              <CardHeader>
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <Card className="border-border/60 shadow-sm">
+              <CardHeader className="p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-4">
                   <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Activity className="w-5 h-5 text-primary" />
+                    <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                      <Activity className="w-5 h-5 text-primary flex-shrink-0" />
                       سجلات ورديات الكاشير المتكاملة
                     </CardTitle>
-                    <CardDescription>عرض تقارير الورديات المالية، الزيادات والعجوزات التفصيلية</CardDescription>
+                    <CardDescription className="text-xs sm:text-sm mt-1">
+                      عرض تقارير الورديات المالية، الزيادات والعجوزات التفصيلية
+                    </CardDescription>
                   </div>
+                  <Badge variant="outline" className="text-xs font-semibold px-2.5 py-1">
+                    {filteredPosShifts.length} وردية
+                  </Badge>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="rounded-md border border-border/50 overflow-x-auto">
+              <CardContent className="p-3 sm:p-6 pt-0 sm:pt-0">
+                {/* Desktop View: Table */}
+                <div className="hidden md:block rounded-xl border border-border/50 overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -601,7 +608,7 @@ export default function Shifts() {
                                 )}
                               </TableCell>
                               <TableCell className="text-center">
-                                <div className="flex justify-center items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="flex justify-center items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                   <Button variant="ghost" size="icon" className="h-8 w-8 text-primary bg-primary/5 hover:bg-primary/20 hover:text-primary transition-colors rounded-full" onClick={(e) => { e.stopPropagation(); handleViewShift(shift); }} title="عرض التقرير المفصل">
                                     <Eye className="w-4 h-4" />
                                   </Button>
@@ -617,28 +624,158 @@ export default function Shifts() {
                     </TableBody>
                   </Table>
                 </div>
+
+                {/* Mobile View: Responsive Shift Cards */}
+                <div className="md:hidden space-y-3">
+                  {loadingPosShifts ? (
+                    <div className="p-8 text-center bg-card border rounded-xl flex flex-col items-center justify-center gap-3">
+                      <div className="w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      <p className="text-xs text-muted-foreground">جاري تحميل ورديات الكاشير...</p>
+                    </div>
+                  ) : filteredPosShifts.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center p-6 text-center bg-card rounded-xl border border-dashed border-border text-muted-foreground">
+                      <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                        <Wallet className="w-6 h-6 opacity-30" />
+                      </div>
+                      <p className="text-sm font-bold text-foreground mb-1">لا توجد ورديات كاشير مسجلة</p>
+                      <p className="text-xs">قم بفتح وردية من نقطة البيع أو غيّر عبارة البحث</p>
+                    </div>
+                  ) : (
+                    filteredPosShifts.map((shift) => {
+                      const discrepancy = shift.discrepancy || 0;
+                      const isDiscrepancyZero = Math.abs(discrepancy) < 0.01;
+                      const discrepancyClass = isDiscrepancyZero 
+                        ? 'text-muted-foreground bg-muted/50 border-border' 
+                        : (discrepancy < 0 ? 'text-red-600 border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-900/20' : 'text-green-600 border-green-200 bg-green-50 dark:border-green-900/50 dark:bg-green-900/20');
+                      const totalSales = shift.total_sales != null ? shift.total_sales : ((shift.cash_sales || 0) + (shift.card_sales || 0) + (shift.wallet_sales || 0));
+
+                      return (
+                        <div
+                          key={shift.id}
+                          className="bg-card rounded-xl border border-border/70 p-3.5 shadow-sm space-y-3 hover:border-primary/40 transition-colors"
+                        >
+                          {/* Card Header: Cashier info + Status */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <Avatar className="h-10 w-10 border border-primary/20 flex-shrink-0">
+                                <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
+                                  {shift.cashier_name?.substring(0, 2)?.toUpperCase() || 'م'}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-bold text-sm text-foreground truncate">{shift.cashier_name || 'غير محدد'}</p>
+                                <p className="text-[11px] text-muted-foreground truncate">{shift.cashier_role || 'كاشير'}</p>
+                              </div>
+                            </div>
+                            <div className="flex-shrink-0">
+                              {shift.status === 'active' ? (
+                                <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30 text-xs gap-1.5 py-0.5 px-2">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-[pulse_1s_ease-in-out_infinite]" /> مفتوحة
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary" className="text-xs font-medium py-0.5 px-2">
+                                  مغلقة
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Time & Duration */}
+                          <div className="bg-muted/40 rounded-lg p-2.5 space-y-1.5 text-xs">
+                            <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5 text-muted-foreground" /> وقت الفتح:
+                              </span>
+                              <span className="font-semibold text-foreground">{formatDate(shift.start_time)}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5 text-muted-foreground" /> وقت الإغلاق:
+                              </span>
+                              <span className="font-semibold text-foreground">
+                                {shift.end_time ? formatDate(shift.end_time) : (
+                                  <span className="text-primary flex items-center gap-1 font-semibold">
+                                    <Timer className="w-3.5 h-3.5" /> <LiveShiftTimer startTime={shift.start_time} />
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Financial mini stats */}
+                          <div className="grid grid-cols-3 gap-2 text-center">
+                            <div className="bg-muted/30 border border-border/50 rounded-lg p-2">
+                              <p className="text-[10px] text-muted-foreground truncate">العهدة</p>
+                              <p className="text-xs font-bold text-foreground mt-0.5 truncate">{formatCurrency(shift.starting_cash || 0)}</p>
+                            </div>
+                            <div className="bg-muted/30 border border-border/50 rounded-lg p-2">
+                              <p className="text-[10px] text-muted-foreground truncate">المبيعات</p>
+                              <p className="text-xs font-bold text-primary mt-0.5 truncate">{formatCurrency(totalSales)}</p>
+                            </div>
+                            <div className="bg-muted/30 border border-border/50 rounded-lg p-2">
+                              <p className="text-[10px] text-muted-foreground truncate">العجز/الزيادة</p>
+                              {shift.status === 'closed' ? (
+                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 mt-0.5 truncate ${discrepancyClass}`}>
+                                  <span dir="ltr">{discrepancy > 0 ? '+' : ''}{formatCurrency(discrepancy)}</span>
+                                </Badge>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground font-bold opacity-60">---</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Card Actions Footer */}
+                          <div className="flex items-center gap-2 pt-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 min-h-[44px] h-11 text-xs font-bold gap-1.5 border-primary/30 text-primary hover:bg-primary/10 rounded-xl"
+                              onClick={() => handleViewShift(shift)}
+                            >
+                              <Eye className="w-4 h-4" />
+                              تقرير التقفيل (Z-Report)
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="min-h-[44px] min-w-[44px] h-11 w-11 text-destructive hover:bg-destructive/10 rounded-xl flex-shrink-0"
+                              onClick={() => handleDeletePosShift(shift.id)}
+                              title="حذف الوردية"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
+          {/* Employee Shifts Tab */}
           <TabsContent value="employee_shifts">
-            <Card>
-              <CardHeader>
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <Card className="border-border/60 shadow-sm">
+              <CardHeader className="p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
                   <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Clock className="w-5 h-5 text-primary" />
+                    <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                      <Clock className="w-5 h-5 text-primary flex-shrink-0" />
                       جدول مواعيد الموظفين
                     </CardTitle>
-                    <CardDescription>إضافة وتعديل أوقات الوردية الثابتة للموظفين</CardDescription>
+                    <CardDescription className="text-xs sm:text-sm mt-1">
+                      إضافة وتعديل أوقات الوردية الثابتة للموظفين
+                    </CardDescription>
                   </div>
-                  <Button onClick={() => setIsAddOpen(true)} className="gap-2">
+                  <Button onClick={() => setIsAddOpen(true)} className="gap-2 w-full sm:w-auto min-h-[44px] sm:min-h-0 h-10 rounded-xl font-bold">
                     <Plus className="w-4 h-4" /> إضافة موعد وردية
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="rounded-md border border-border/50 overflow-x-auto">
+              <CardContent className="p-3 sm:p-6 pt-0 sm:pt-0">
+                {/* Desktop View: Table */}
+                <div className="hidden md:block rounded-xl border border-border/50 overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -660,7 +797,7 @@ export default function Shifts() {
                         </TableRow>
                       ) : filteredShifts.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="h-48 text-center bg-gray-50/50 dark:bg-slate-900/20">
+                          <TableCell colSpan={5} className="h-48 text-center bg-gray-50/50 dark:bg-slate-900/20">
                             <div className="flex flex-col flex-1 items-center justify-center p-8 text-muted-foreground">
                               <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
                                 <Users className="w-8 h-8 opacity-20" />
@@ -698,7 +835,7 @@ export default function Shifts() {
                               </span>
                             </TableCell>
                             <TableCell className="text-center">
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex justify-center gap-1">
+                              <div className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex justify-center gap-1">
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors rounded-full" onClick={() => setEditingShift(shift)}>
                                   <Edit className="w-4 h-4" />
                                 </Button>
@@ -713,6 +850,84 @@ export default function Shifts() {
                     </TableBody>
                   </Table>
                 </div>
+
+                {/* Mobile View: Responsive Employee Shift Cards */}
+                <div className="md:hidden space-y-3">
+                  {loading ? (
+                    <div className="p-8 text-center bg-card border rounded-xl flex flex-col items-center justify-center gap-3">
+                      <div className="w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      <p className="text-xs text-muted-foreground">جاري تحميل مواعيد الموظفين...</p>
+                    </div>
+                  ) : filteredShifts.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center p-6 text-center bg-card rounded-xl border border-dashed border-border text-muted-foreground">
+                      <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                        <Users className="w-6 h-6 opacity-30" />
+                      </div>
+                      <p className="text-sm font-bold text-foreground mb-1">لا توجد مواعيد موظفين مسجلة</p>
+                      <p className="text-xs">اضغط "إضافة موعد وردية" لتسجيل جدول عمل جديد</p>
+                    </div>
+                  ) : (
+                    filteredShifts.map((shift) => (
+                      <div
+                        key={shift.id}
+                        className="bg-card rounded-xl border border-border/70 p-3.5 shadow-sm space-y-3 hover:border-primary/40 transition-colors"
+                      >
+                        {/* Header: Employee Info + Shift Type */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <Avatar className="h-10 w-10 border border-primary/20 flex-shrink-0">
+                              <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
+                                {shift.employee_name?.substring(0, 2)?.toUpperCase() || 'م'}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-sm text-foreground truncate">{shift.employee_name || 'غير محدد'}</p>
+                              <p className="text-[11px] text-muted-foreground truncate">{shift.role || 'موظف'}</p>
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-xs font-semibold bg-blue-50/50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                            {shift.shift_type === 'morning' ? 'صباحية' : shift.shift_type === 'evening' ? 'مسائية' : 'ليلية'}
+                          </Badge>
+                        </div>
+
+                        {/* Working Hours Banner */}
+                        <div className="bg-muted/40 rounded-lg p-2.5 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1.5 text-muted-foreground">
+                            <Clock className="w-3.5 h-3.5 text-primary" />
+                            <span>ساعات العمل:</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 font-bold text-foreground" dir="ltr">
+                            <span>{shift.start_time || '--:--'}</span>
+                            <span className="text-muted-foreground">→</span>
+                            <span>{shift.end_time || '--:--'}</span>
+                          </div>
+                        </div>
+
+                        {/* Card Actions Footer */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 min-h-[44px] h-11 text-xs font-bold gap-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl"
+                            onClick={() => setEditingShift(shift)}
+                          >
+                            <Edit className="w-4 h-4" />
+                            تعديل الوردية
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="min-h-[44px] min-w-[44px] h-11 w-11 text-destructive hover:bg-destructive/10 rounded-xl flex-shrink-0"
+                            onClick={() => handleDelete(shift.id)}
+                            title="حذف الوردية"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -721,72 +936,72 @@ export default function Shifts() {
 
       {/* POS Shift Details Dialog (Z-Report) */}
       <Dialog open={!!viewingShift} onOpenChange={(open) => !open && setViewingShift(null)}>
-        <DialogContent className="max-w-[480px] w-[95%] p-0 overflow-hidden border-0 shadow-2xl rounded-2xl bg-white dark:bg-slate-950">
-          <div className="flex flex-col max-h-[85vh]">
-            <div className="bg-slate-50 dark:bg-slate-900 border-b p-4 flex justify-between items-center z-10 sticky top-0 shadow-sm print:hidden">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+        <DialogContent className="max-w-[95vw] sm:max-w-[480px] p-0 overflow-hidden border-0 shadow-2xl rounded-2xl bg-white dark:bg-slate-950 max-h-[90dvh] flex flex-col">
+          <div className="flex flex-col h-full max-h-[90dvh]">
+            <div className="bg-slate-50 dark:bg-slate-900 border-b p-3.5 sm:p-4 flex justify-between items-center z-10 sticky top-0 shadow-sm print:hidden">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
                   <CheckCircle2 className="w-4 h-4" />
                 </div>
-                <div>
-                  <h3 className="font-bold text-sm leading-none">تقرير التقفيل النهائي (Z-Report)</h3>
-                  <p className="text-[11px] text-muted-foreground mt-1">تفاصيل وحالة الوردية</p>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-bold text-sm leading-none truncate">تقرير التقفيل النهائي (Z-Report)</h3>
+                  <p className="text-[11px] text-muted-foreground mt-1 truncate">تفاصيل وحالة الوردية</p>
                 </div>
               </div>
-              <Badge variant={viewingShift?.status === 'active' ? 'default' : 'secondary'} className={viewingShift?.status === 'active' ? 'bg-green-500' : ''}>
+              <Badge variant={viewingShift?.status === 'active' ? 'default' : 'secondary'} className={`flex-shrink-0 ${viewingShift?.status === 'active' ? 'bg-green-500' : ''}`}>
                 {viewingShift?.status === 'active' ? 'مفتوحة الآن' : 'مغلقة'}
               </Badge>
             </div>
 
-            <div className="flex-1 overflow-y-auto w-full p-6 custom-scrollbar" dir="rtl">
+            <div className="flex-1 overflow-y-auto w-full p-4 sm:p-6 custom-scrollbar" dir="rtl">
             {loadingShiftDetails ? (
-              <div className="p-12 flex flex-col justify-center items-center w-full min-h-[400px]">
+              <div className="p-12 flex flex-col justify-center items-center w-full min-h-[300px]">
                 <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4" />
                 <p className="text-sm text-muted-foreground animate-pulse">جاري سحب بيانات تقرير الوردية...</p>
               </div>
             ) : (
-           <div className="flex flex-col gap-6" dir="rtl">
+           <div className="flex flex-col gap-4 sm:gap-6" dir="rtl">
               <div className="text-center">
                 <h1 className="text-xl font-black mb-1">{settings?.invoiceCompanyName || 'MK'}</h1>
                 <p className="text-sm text-muted-foreground">الكاشير: <span className="font-bold text-foreground">{viewingShift?.cashier_name || 'غير محدد'}</span></p>
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-4">
                   <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border">
                     <p className="text-xs text-muted-foreground mb-1">وقت الفتح</p>
-                    <p className="text-sm font-bold">{viewingShift?.start_time ? new Date(viewingShift.start_time).toLocaleString('ar-EG') : '-'}</p>
+                    <p className="text-xs sm:text-sm font-bold">{viewingShift?.start_time ? new Date(viewingShift.start_time).toLocaleString('ar-EG') : '-'}</p>
                   </div>
                   <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border">
                     <p className="text-xs text-muted-foreground mb-1">وقت الإغلاق</p>
                     {viewingShift?.status === 'active' ? (
-                       <div className="text-sm font-bold text-primary flex items-center gap-1.5"><Timer className="w-3.5 h-3.5"/> <LiveShiftTimer startTime={viewingShift.start_time} /></div>
+                       <div className="text-xs sm:text-sm font-bold text-primary flex items-center gap-1.5"><Timer className="w-3.5 h-3.5"/> <LiveShiftTimer startTime={viewingShift.start_time} /></div>
                     ) : (
-                       <p className="text-sm font-bold">{viewingShift?.end_time ? new Date(viewingShift.end_time).toLocaleString('ar-EG') : '-'}</p>
+                       <p className="text-xs sm:text-sm font-bold">{viewingShift?.end_time ? new Date(viewingShift.end_time).toLocaleString('ar-EG') : '-'}</p>
                     )}
                   </div>
               </div>
 
               <div className="space-y-4">
                   <div>
-                    <h3 className="font-bold text-sm mb-3 flex items-center gap-2"><DollarSign className="w-4 h-4 text-primary" /> الدخل التفصيلي</h3>
-                    <div className="space-y-2 text-sm bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border">
-                        <div className="flex justify-between py-1.5 border-b border-border/50 border-dashed">
+                    <h3 className="font-bold text-sm mb-2.5 flex items-center gap-2"><DollarSign className="w-4 h-4 text-primary" /> الدخل التفصيلي</h3>
+                    <div className="space-y-2 text-sm bg-slate-50 dark:bg-slate-900/50 p-3.5 sm:p-4 rounded-xl border">
+                        <div className="flex justify-between py-1.5 border-b border-border/50 border-dashed text-xs sm:text-sm">
                           <span className="text-muted-foreground">العهدة الافتتاحية (المستلمة):</span>
                           <span className="font-medium">{formatCurrency(viewingShift?.starting_cash || 0)}</span>
                         </div>
-                        <div className="flex justify-between py-1.5 border-b border-border/50 border-dashed">
+                        <div className="flex justify-between py-1.5 border-b border-border/50 border-dashed text-xs sm:text-sm">
                           <span className="text-muted-foreground">المبيعات النقدية (كاش):</span>
                           <span className="font-medium text-green-600">+ {formatCurrency(viewingShift?.cash_sales || 0)}</span>
                         </div>
-                        <div className="flex justify-between py-1.5 border-b border-border/50 border-dashed">
+                        <div className="flex justify-between py-1.5 border-b border-border/50 border-dashed text-xs sm:text-sm">
                           <span className="text-muted-foreground">مبيعات البطاقات (شبكة):</span>
                           <span className="font-medium text-blue-600">{formatCurrency(viewingShift?.card_sales || 0)}</span>
                         </div>
-                        <div className="flex justify-between py-1.5 border-b border-border/50 border-dashed">
+                        <div className="flex justify-between py-1.5 border-b border-border/50 border-dashed text-xs sm:text-sm">
                           <span className="text-muted-foreground">مبيعات إلكترونية (تطبيقات):</span>
                           <span className="font-medium text-purple-600">{formatCurrency(viewingShift?.wallet_sales || 0)}</span>
                         </div>
-                        <div className="flex justify-between py-2 mt-1">
+                        <div className="flex justify-between py-2 mt-1 text-xs sm:text-sm">
                           <span className="font-bold">إجمالي المبيعات (بدون التوصيل):</span>
                           <span className="font-bold">{formatCurrency(viewingShift?.total_sales != null ? viewingShift.total_sales : ((viewingShift?.cash_sales || 0) + (viewingShift?.card_sales || 0) + (viewingShift?.wallet_sales || 0)))}</span>
                         </div>
@@ -794,35 +1009,35 @@ export default function Shifts() {
                   </div>
 
                   <div>
-                    <h3 className="font-bold text-sm mb-3 flex items-center gap-2"><Activity className="w-4 h-4 text-primary" /> تفاصيل الطلبات ({confirmedShiftOrders.length})</h3>
-                    <div className="flex gap-2">
-                       <span className="flex-1 bg-slate-50 dark:bg-slate-900/50 text-center text-xs py-2 rounded-lg border">
+                    <h3 className="font-bold text-sm mb-2.5 flex items-center gap-2"><Activity className="w-4 h-4 text-primary" /> تفاصيل الطلبات ({confirmedShiftOrders.length})</h3>
+                    <div className="grid grid-cols-3 gap-2">
+                       <span className="bg-slate-50 dark:bg-slate-900/50 text-center text-xs py-2 rounded-lg border">
                           دليفري: <b>{deliveryCount}</b>
                        </span>
-                       <span className="flex-1 bg-slate-50 dark:bg-slate-900/50 text-center text-xs py-2 rounded-lg border">
+                       <span className="bg-slate-50 dark:bg-slate-900/50 text-center text-xs py-2 rounded-lg border">
                           تيك أواي: <b>{takeawayCount}</b>
                        </span>
-                       <span className="flex-1 bg-slate-50 dark:bg-slate-900/50 text-center text-xs py-2 rounded-lg border">
+                       <span className="bg-slate-50 dark:bg-slate-900/50 text-center text-xs py-2 rounded-lg border">
                           صالة: <b>{dineinCount}</b>
                        </span>
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="font-bold text-sm mb-3 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-primary" /> المصروفات والسحوبات <span className="text-xs font-normal bg-secondary px-2 rounded-full mr-auto">{shiftExpenses.length} عناصر</span></h3>
-                    <div className="space-y-2 text-sm bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border">
+                    <h3 className="font-bold text-sm mb-2.5 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-primary" /> المصروفات والسحوبات <span className="text-xs font-normal bg-secondary px-2 rounded-full mr-auto">{shiftExpenses.length} عناصر</span></h3>
+                    <div className="space-y-2 text-sm bg-slate-50 dark:bg-slate-900/50 p-3.5 sm:p-4 rounded-xl border">
                         {shiftExpenses.length > 0 ? (
                           shiftExpenses.map((e, idx) => (
-                            <div key={idx} className="flex justify-between py-1 border-b border-border/50 border-dashed last:border-0 pl-1 pr-1">
-                              <span className="text-muted-foreground">{e.description || 'مصروف'}</span>
-                              <span>{formatCurrency(Number(e.amount))}</span>
+                            <div key={idx} className="flex justify-between py-1 border-b border-border/50 border-dashed last:border-0 pl-1 pr-1 text-xs sm:text-sm">
+                              <span className="text-muted-foreground truncate">{e.description || 'مصروف'}</span>
+                              <span className="flex-shrink-0 font-medium">{formatCurrency(Number(e.amount))}</span>
                             </div>
                           ))
                         ) : (
                           <div className="text-center py-2 text-muted-foreground text-xs">لا توجد مصروفات سجلت في هذه الوردية</div>
                         )}
                         {shiftExpenses.length > 0 && (
-                          <div className="flex justify-between py-2 border-t font-bold mt-1">
+                          <div className="flex justify-between py-2 border-t font-bold mt-1 text-xs sm:text-sm">
                             <span>إجمالي المصروفات:</span>
                             <span className="text-red-500">- {formatCurrency(viewingShift?.shift_expenses || 0)}</span>
                           </div>
@@ -830,30 +1045,30 @@ export default function Shifts() {
                     </div>
                   </div>
 
-                  <div className="pt-2">
-                    <h3 className="font-bold text-sm mb-3 flex items-center gap-2"><Wallet className="w-4 h-4 text-primary" /> تسوية الدرج (النقدية فقط)</h3>
-                    <div className="bg-primary/5 border border-primary/20 p-4 rounded-xl">
-                      <div className="flex justify-between py-1 mb-2">
+                  <div className="pt-1">
+                    <h3 className="font-bold text-sm mb-2.5 flex items-center gap-2"><Wallet className="w-4 h-4 text-primary" /> تسوية الدرج (النقدية فقط)</h3>
+                    <div className="bg-primary/5 border border-primary/20 p-3.5 sm:p-4 rounded-xl">
+                      <div className="flex justify-between py-1 mb-2 text-xs sm:text-sm">
                          <span className="font-medium">المتوقع بالدرج:</span>
                          <span className="font-bold">{formatCurrency(viewingShift?.expected_cash || 0)}</span>
                       </div>
                       
                       {viewingShift?.status === 'closed' && (
                         <>
-                          <div className="flex justify-between items-center py-2 border-t border-primary/20 mt-1 mb-2">
-                            <span className="font-medium text-sm">تم تسليمه فعلياً:</span>
-                            <span className="text-lg bg-white dark:bg-black px-3 py-1 rounded shadow-sm border font-black">{formatCurrency(viewingShift?.actual_cash || 0)}</span>
+                          <div className="flex justify-between items-center py-2 border-t border-primary/20 mt-1 mb-2 text-xs sm:text-sm">
+                            <span className="font-medium">تم تسليمه فعلياً:</span>
+                            <span className="text-base sm:text-lg bg-white dark:bg-black px-2.5 py-1 rounded shadow-sm border font-black">{formatCurrency(viewingShift?.actual_cash || 0)}</span>
                           </div>
-                          <div className={`flex justify-between items-center p-3 rounded-lg border ${
+                          <div className={`flex justify-between items-center p-2.5 sm:p-3 rounded-lg border text-xs sm:text-sm ${
                             (viewingShift?.discrepancy || 0) < 0 ? 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-800' : 
                             (viewingShift?.discrepancy || 0) > 0 ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800' : 
                             'bg-slate-50 border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 text-foreground'
                           }`}>
                             <div className="flex items-center gap-2">
-                               {(viewingShift?.discrepancy || 0) < 0 ? <AlertCircle className="w-4 h-4"/> : <CheckCircle2 className="w-4 h-4"/>}
-                               <span className="font-bold text-sm">
+                               {(viewingShift?.discrepancy || 0) < 0 ? <AlertCircle className="w-4 h-4 flex-shrink-0"/> : <CheckCircle2 className="w-4 h-4 flex-shrink-0"/>}
+                               <span className="font-bold">
                                   {(viewingShift?.discrepancy || 0) < 0 ? 'عجز نقدي بالوردية' : (viewingShift?.discrepancy || 0) > 0 ? 'زيادة نقدية مع الكاشير' : 'مطابق تماماً'}
-                               </span>
+                                </span>
                             </div>
                             <span className="font-black" dir="ltr">{(viewingShift?.discrepancy || 0) > 0 ? '+' : ''}{formatCurrency(viewingShift?.discrepancy || 0)}</span>
                           </div>
@@ -872,9 +1087,13 @@ export default function Shifts() {
            )}
            </div>
            
-           <div className="p-4 border-t bg-slate-50 dark:bg-slate-900 flex gap-3 print:hidden">
-              <Button onClick={() => setViewingShift(null)} variant="outline" className="flex-1">إغلاق</Button>
-              <Button onClick={handlePrintReport} className="gap-2 flex-1"><Printer className="w-4 h-4"/> طباعة إيصال التقفيل</Button>
+           <div className="p-3 sm:p-4 border-t bg-slate-50 dark:bg-slate-900 flex flex-col-reverse sm:flex-row gap-2.5 sm:gap-3 print:hidden">
+              <Button onClick={() => setViewingShift(null)} variant="outline" className="w-full sm:flex-1 min-h-[44px] rounded-xl font-bold">
+                إغلاق
+              </Button>
+              <Button onClick={handlePrintReport} className="gap-2 w-full sm:flex-1 min-h-[44px] rounded-xl font-bold">
+                <Printer className="w-4 h-4 flex-shrink-0"/> طباعة إيصال التقفيل
+              </Button>
            </div>
           </div>
         </DialogContent>
@@ -882,48 +1101,72 @@ export default function Shifts() {
 
       {/* Add Employee Shift Dialog */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl p-4 sm:p-6">
           <form onSubmit={handleAdd}>
-            <DialogHeader>
-              <DialogTitle>إضافة وردية موظف جديدة</DialogTitle>
+            <DialogHeader className="pb-2">
+              <DialogTitle className="text-base sm:text-lg font-bold">إضافة وردية موظف جديدة</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>اسم الموظف *</Label>
+            <div className="space-y-4 py-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs sm:text-sm font-semibold">اسم الموظف *</Label>
                 <Select required value={employeeName} onValueChange={setEmployeeName} disabled={isSubmitting}>
-                  <SelectTrigger><SelectValue placeholder="اختر الموظف" /></SelectTrigger>
-                  <SelectContent>
+                  <SelectTrigger className="w-full h-11 text-base sm:text-sm rounded-xl">
+                    <SelectValue placeholder="اختر الموظف" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
                     {dbEmployees.map(emp => (
-                      <SelectItem key={emp.id} value={emp.name}>{emp.name} - ({emp.role || 'موظف'})</SelectItem>
+                      <SelectItem key={emp.id} value={emp.name} className="text-sm">
+                        {emp.name} - ({emp.role || 'موظف'})
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>نوع الوردية</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs sm:text-sm font-semibold">نوع الوردية</Label>
                 <Select value={shiftType} onValueChange={setShiftType} disabled={isSubmitting}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full h-11 text-base sm:text-sm rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="morning">صباحية</SelectItem>
-                    <SelectItem value="evening">مسائية</SelectItem>
-                    <SelectItem value="night">ليلية</SelectItem>
+                    <SelectItem value="morning" className="text-sm">صباحية</SelectItem>
+                    <SelectItem value="evening" className="text-sm">مسائية</SelectItem>
+                    <SelectItem value="night" className="text-sm">ليلية</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>وقت البدء *</Label>
-                  <Input type="time" required value={startTime} onChange={e => setStartTime(e.target.value)} disabled={isSubmitting} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs sm:text-sm font-semibold">وقت البدء *</Label>
+                  <Input 
+                    type="time" 
+                    required 
+                    value={startTime} 
+                    onChange={e => setStartTime(e.target.value)} 
+                    disabled={isSubmitting} 
+                    className="h-11 text-base sm:text-sm rounded-xl"
+                  />
                 </div>
-                <div className="space-y-2">
-                  <Label>وقت الانتهاء *</Label>
-                  <Input type="time" required value={endTime} onChange={e => setEndTime(e.target.value)} disabled={isSubmitting} />
+                <div className="space-y-1.5">
+                  <Label className="text-xs sm:text-sm font-semibold">وقت الانتهاء *</Label>
+                  <Input 
+                    type="time" 
+                    required 
+                    value={endTime} 
+                    onChange={e => setEndTime(e.target.value)} 
+                    disabled={isSubmitting} 
+                    className="h-11 text-base sm:text-sm rounded-xl"
+                  />
                 </div>
               </div>
             </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)} disabled={isSubmitting}>إلغاء</Button>
-              <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'جاري الحفظ...' : 'حفظ'}</Button>
+            <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)} disabled={isSubmitting} className="min-h-[44px] rounded-xl font-bold">
+                إلغاء
+              </Button>
+              <Button type="submit" disabled={isSubmitting} className="min-h-[44px] rounded-xl font-bold">
+                {isSubmitting ? 'جاري الحفظ...' : 'حفظ'}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -931,50 +1174,74 @@ export default function Shifts() {
 
       {/* Edit Employee Shift Dialog */}
       <Dialog open={!!editingShift} onOpenChange={(open) => !open && setEditingShift(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl p-4 sm:p-6">
           <form onSubmit={handleUpdate}>
-            <DialogHeader>
-              <DialogTitle>تعديل الوردية</DialogTitle>
+            <DialogHeader className="pb-2">
+              <DialogTitle className="text-base sm:text-lg font-bold">تعديل الوردية</DialogTitle>
             </DialogHeader>
             {editingShift && (
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>اسم الموظف *</Label>
+              <div className="space-y-4 py-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs sm:text-sm font-semibold">اسم الموظف *</Label>
                   <Select required value={editingShift.employee_name} onValueChange={val => setEditingShift({...editingShift, employee_name: val})} disabled={isSubmitting}>
-                    <SelectTrigger><SelectValue placeholder="اختر الموظف" /></SelectTrigger>
-                    <SelectContent>
+                    <SelectTrigger className="w-full h-11 text-base sm:text-sm rounded-xl">
+                      <SelectValue placeholder="اختر الموظف" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-56">
                       {dbEmployees.map(emp => (
-                        <SelectItem key={emp.id} value={emp.name}>{emp.name} - ({emp.role || 'موظف'})</SelectItem>
+                        <SelectItem key={emp.id} value={emp.name} className="text-sm">
+                          {emp.name} - ({emp.role || 'موظف'})
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>نوع الوردية</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-xs sm:text-sm font-semibold">نوع الوردية</Label>
                   <Select value={editingShift.shift_type} onValueChange={v => setEditingShift({...editingShift, shift_type: v})} disabled={isSubmitting}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="w-full h-11 text-base sm:text-sm rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="morning">صباحية</SelectItem>
-                      <SelectItem value="evening">مسائية</SelectItem>
-                      <SelectItem value="night">ليلية</SelectItem>
+                      <SelectItem value="morning" className="text-sm">صباحية</SelectItem>
+                      <SelectItem value="evening" className="text-sm">مسائية</SelectItem>
+                      <SelectItem value="night" className="text-sm">ليلية</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>وقت البدء *</Label>
-                    <Input type="time" required value={editingShift.start_time} onChange={e => setEditingShift({...editingShift, start_time: e.target.value})} disabled={isSubmitting} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs sm:text-sm font-semibold">وقت البدء *</Label>
+                    <Input 
+                      type="time" 
+                      required 
+                      value={editingShift.start_time} 
+                      onChange={e => setEditingShift({...editingShift, start_time: e.target.value})} 
+                      disabled={isSubmitting} 
+                      className="h-11 text-base sm:text-sm rounded-xl"
+                    />
                   </div>
-                  <div className="space-y-2">
-                    <Label>وقت الانتهاء *</Label>
-                    <Input type="time" required value={editingShift.end_time || ''} onChange={e => setEditingShift({...editingShift, end_time: e.target.value})} disabled={isSubmitting} />
+                  <div className="space-y-1.5">
+                    <Label className="text-xs sm:text-sm font-semibold">وقت الانتهاء *</Label>
+                    <Input 
+                      type="time" 
+                      required 
+                      value={editingShift.end_time || ''} 
+                      onChange={e => setEditingShift({...editingShift, end_time: e.target.value})} 
+                      disabled={isSubmitting} 
+                      className="h-11 text-base sm:text-sm rounded-xl"
+                    />
                   </div>
                 </div>
               </div>
             )}
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditingShift(null)} disabled={isSubmitting}>إلغاء</Button>
-              <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'جاري الحفظ...' : 'حفظ التحديث'}</Button>
+            <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2">
+              <Button type="button" variant="outline" onClick={() => setEditingShift(null)} disabled={isSubmitting} className="min-h-[44px] rounded-xl font-bold">
+                إلغاء
+              </Button>
+              <Button type="submit" disabled={isSubmitting} className="min-h-[44px] rounded-xl font-bold">
+                {isSubmitting ? 'جاري الحفظ...' : 'حفظ التحديث'}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
