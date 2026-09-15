@@ -51,13 +51,13 @@ export default function Dashboard() {
         <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-gradient-to-tr from-indigo-500/20 via-purple-600/10 to-transparent blur-[80px] rounded-full opacity-40 group-hover:opacity-80 transition-opacity duration-1000 pointer-events-none" />
 
         {/* Inner Content Border Container */}
-        <div className="relative bg-card/40 backdrop-blur-md rounded-[32px] border border-white/5 m-1 p-8 md:p-12 flex flex-col lg:flex-row items-center justify-between gap-8 z-10">
+        <div className="relative bg-card/40 backdrop-blur-md rounded-[24px] sm:rounded-[32px] border border-white/5 m-1 p-4 sm:p-8 md:p-12 flex flex-col lg:flex-row items-center justify-between gap-6 sm:gap-8 z-10">
 
           {/* Text Content */}
-          <div className="flex flex-col items-center lg:items-start text-center lg:text-right gap-5">
+          <div className="flex flex-col items-center lg:items-start text-center lg:text-right gap-4 sm:gap-5">
 
             {/* Live indicator Badge */}
-            <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-black/20 border border-white/10 text-xs font-bold tracking-widest shadow-inner backdrop-blur-xl">
+            <div className="inline-flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-black/20 border border-white/10 text-xs font-bold tracking-widest shadow-inner backdrop-blur-xl">
               <span className="relative flex h-2.5 w-2.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
@@ -70,14 +70,14 @@ export default function Dashboard() {
               </span>
             </div>
 
-            <h1 className="text-4xl md:text-5xl font-black text-foreground tracking-tight leading-tight drop-shadow-sm">
+            <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-foreground tracking-tight leading-tight drop-shadow-sm">
               نظرة عامة على{' '}
               <span className="text-transparent bg-clip-text bg-gradient-to-l from-cyan-400 via-blue-500 to-indigo-500 drop-shadow-md">
                 أداء اليوم
               </span>
             </h1>
 
-            <p className="text-muted-foreground/90 md:text-lg max-w-2xl font-medium leading-relaxed">
+            <p className="text-muted-foreground/90 text-sm md:text-lg max-w-2xl font-medium leading-relaxed">
               مرحباً <span className="font-bold text-white bg-white/10 px-2 py-0.5 rounded-md mx-1">{displayName}</span> 👋 جميع مؤشراتك جاهزة للمراجعة.
               تفقد الإحصائيات الحية لتعزيز الإنتاجية ودعم اتخاذ قراراتك أسرع من أي وقت مضى.
             </p>
@@ -99,7 +99,7 @@ export default function Dashboard() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6 mb-8">
         {kpis.map((kpi, index) => (
           <motion.div key={kpi.title} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }}>
             <KPICard {...kpi} loading={loading} />
@@ -284,8 +284,8 @@ export default function Dashboard() {
         </Card>
 
         {/* System Alerts */}
-        <div className="lg:col-span-1 grid grid-cols-2 gap-4">
-          <div className="col-span-2 p-6 bg-gradient-to-br from-indigo-500/10 to-indigo-600/5 dark:from-indigo-500/20 dark:to-indigo-600/10 rounded-3xl border border-indigo-200/50 dark:border-indigo-800/50 flex flex-col justify-center relative overflow-hidden group hover:border-indigo-500/50 transition-colors">
+        <div className="lg:col-span-1 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <div className="col-span-1 sm:col-span-2 p-4 sm:p-6 bg-gradient-to-br from-indigo-500/10 to-indigo-600/5 dark:from-indigo-500/20 dark:to-indigo-600/10 rounded-3xl border border-indigo-200/50 dark:border-indigo-800/50 flex flex-col justify-center relative overflow-hidden group hover:border-indigo-500/50 transition-colors">
             <div className="absolute -right-6 -top-6 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl group-hover:bg-indigo-500/20 transition-colors pointer-events-none" />
             <div className="flex items-center gap-3 mb-2">
               <div className="p-2.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-xl">

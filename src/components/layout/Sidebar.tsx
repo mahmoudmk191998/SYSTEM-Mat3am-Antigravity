@@ -110,7 +110,7 @@ function NavGroupMenu({ group, location, isAdmin, hasAnyPermission, onNavigate, 
     const content = (
       <Link key={item.path} to={item.path} onClick={onNavigate}
         className={cn(
-          'group relative flex items-center gap-3 px-2 py-2.5 rounded-xl transition-all duration-300 overflow-hidden outline-none',
+          'group relative flex items-center gap-3 px-2 py-2.5 rounded-xl transition-all duration-300 overflow-hidden outline-none min-h-[44px] touch-manipulation',
           isActive
             ? 'bg-gradient-to-l from-primary/15 to-primary/5 text-primary font-bold shadow-sm border border-primary/10'
             : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground my-0.5 border border-transparent'
@@ -149,7 +149,7 @@ function NavGroupMenu({ group, location, isAdmin, hasAnyPermission, onNavigate, 
   const triggerContent = (
     <button
       className={cn(
-        'w-full flex items-center gap-3 px-2 py-2.5 rounded-xl transition-all duration-300 group outline-none border border-transparent',
+        'w-full flex items-center gap-3 px-2 py-2.5 rounded-xl transition-all duration-300 group outline-none border border-transparent min-h-[44px] touch-manipulation',
         isOpen && !sidebarCollapsed ? 'text-primary bg-sidebar-accent/10' : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/30 hover:text-sidebar-foreground'
       )}>
       <div className={cn(
@@ -196,7 +196,7 @@ function NavGroupMenu({ group, location, isAdmin, hasAnyPermission, onNavigate, 
               <Link key={item.path} to={item.path} onClick={onNavigate}
                 style={{ animationDelay: `${index * 40}ms` }}
                 className={cn(
-                  'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-all duration-300 group overflow-hidden outline-none',
+                  'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-all duration-300 group overflow-hidden outline-none min-h-[40px] touch-manipulation',
                   isActive
                     ? 'bg-gradient-to-l from-primary/10 to-transparent text-primary font-bold'
                     : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/30 hover:translate-x-[-4px]'
@@ -225,7 +225,7 @@ export function SidebarContent({ onNavigate, isMobile }: { onNavigate?: () => vo
 
   return (
     <div className="flex flex-col h-full bg-sidebar">
-      {!isMobile && (
+      {!isMobile ? (
         <div className="p-5 border-b border-sidebar-border/50 bg-gradient-to-b from-sidebar-accent/20 to-transparent">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-white shadow-sm overflow-hidden flex-shrink-0 border-2 border-sidebar-border/50">
@@ -239,11 +239,17 @@ export function SidebarContent({ onNavigate, isMobile }: { onNavigate?: () => vo
             </div>
           </div>
         </div>
-      )}
-
-      {isMobile && (
-        <div className="p-5 border-b border-sidebar-border/50 bg-sidebar-accent/10">
-          <h2 className="font-black text-xl text-sidebar-foreground">عناصر النظام</h2>
+      ) : (
+        <div className="p-4 border-b border-sidebar-border/50 bg-sidebar-accent/10 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-white shadow-sm overflow-hidden flex-shrink-0 border border-sidebar-border/50">
+            <img src={mkLogo} alt="MK" className="w-full h-full object-contain p-1" />
+          </div>
+          <div className="overflow-hidden flex-1">
+            <h2 className="font-black text-base text-sidebar-foreground">إم كـي سيستم</h2>
+            <p className="text-[11px] text-sidebar-foreground/60 truncate font-medium">
+              {profile?.full_name || 'لوحة التحكم'}
+            </p>
+          </div>
         </div>
       )}
 

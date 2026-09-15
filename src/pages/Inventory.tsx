@@ -705,33 +705,33 @@ export default function Inventory() {
 
       {/* Add/Edit Item Dialog from Previous Implementation modified slightly */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent><DialogHeader><DialogTitle>إضافة صنف جديد</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-[95vw] md:max-w-lg max-h-[90dvh] overflow-y-auto"><DialogHeader><DialogTitle>إضافة صنف جديد</DialogTitle></DialogHeader>
           <form onSubmit={handleAddItem} className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>اسم الصنف *</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required /></div><div className="space-y-2"><Label>SKU</Label><Input value={form.sku} onChange={e => setForm(f => ({ ...f, sku: e.target.value }))} /></div></div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div className="space-y-2"><Label>اسم الصنف *</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required /></div><div className="space-y-2"><Label>SKU</Label><Input value={form.sku} onChange={e => setForm(f => ({ ...f, sku: e.target.value }))} /></div></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>الفئة</Label><Input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} placeholder="لحوم, خضار..." /></div>
               <div className="space-y-2"><Label>الوحدة</Label><Select value={form.unit_id || undefined} onValueChange={v => setForm(f => ({ ...f, unit_id: v }))}><SelectTrigger><SelectValue placeholder={units.length === 0 ? "يرجى إضافة وحدات أولاً" : "اختر"} /></SelectTrigger><SelectContent>{units.map((u: any) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select></div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>الكمية الأولية</Label><Input type="number" min="0" step="any" value={form.initial_quantity} onChange={e => setForm(f => ({ ...f, initial_quantity: e.target.value as any }))} /></div>
               <div className="space-y-2"><Label>التكلفة للوحدة</Label><Input type="number" min="0" step="any" value={form.cost_per_unit} onChange={e => setForm(f => ({ ...f, cost_per_unit: e.target.value as any }))} /></div>
             </div>
-            <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>الحد الأدنى</Label><Input type="number" min="0" step="any" value={form.min_stock_level} onChange={e => setForm(f => ({ ...f, min_stock_level: e.target.value as any }))} /></div><div className="space-y-2"><Label>الحد الأقصى</Label><Input type="number" min="0" step="any" value={form.max_stock_level} onChange={e => setForm(f => ({ ...f, max_stock_level: e.target.value as any }))} /></div></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div className="space-y-2"><Label>الحد الأدنى</Label><Input type="number" min="0" step="any" value={form.min_stock_level} onChange={e => setForm(f => ({ ...f, min_stock_level: e.target.value as any }))} /></div><div className="space-y-2"><Label>الحد الأقصى</Label><Input type="number" min="0" step="any" value={form.max_stock_level} onChange={e => setForm(f => ({ ...f, max_stock_level: e.target.value as any }))} /></div></div>
             <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setShowAddDialog(false)}>إلغاء</Button><Button type="submit">حفظ</Button></div>
           </form>
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!showEditDialog} onOpenChange={() => setShowEditDialog(null)}>
-        <DialogContent><DialogHeader><DialogTitle>تعديل الصنف</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-[95vw] md:max-w-lg max-h-[90dvh] overflow-y-auto"><DialogHeader><DialogTitle>تعديل الصنف</DialogTitle></DialogHeader>
           {showEditDialog && (
             <form onSubmit={handleUpdateItem} className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>اسم الصنف</Label><Input value={showEditDialog.name} onChange={e => setShowEditDialog((s: any) => ({ ...s, name: e.target.value }))} /></div><div className="space-y-2"><Label>SKU</Label><Input value={showEditDialog.sku || ''} onChange={e => setShowEditDialog((s: any) => ({ ...s, sku: e.target.value }))} /></div></div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div className="space-y-2"><Label>اسم الصنف</Label><Input value={showEditDialog.name} onChange={e => setShowEditDialog((s: any) => ({ ...s, name: e.target.value }))} /></div><div className="space-y-2"><Label>SKU</Label><Input value={showEditDialog.sku || ''} onChange={e => setShowEditDialog((s: any) => ({ ...s, sku: e.target.value }))} /></div></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2"><Label>الفئة</Label><Input value={showEditDialog.category || ''} onChange={e => setShowEditDialog((s: any) => ({ ...s, category: e.target.value }))} /></div>
                 <div className="space-y-2"><Label>الوحدة</Label><Select value={showEditDialog.unit_id || undefined} onValueChange={v => setShowEditDialog((s: any) => ({ ...s, unit_id: v }))}><SelectTrigger><SelectValue placeholder={units.length === 0 ? "يرجى إضافة وحدات أولاً" : "اختر"} /></SelectTrigger><SelectContent>{units.map((u: any) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select></div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2"><Label>التكلفة</Label><Input type="number" min="0" step="any" value={showEditDialog.cost_per_unit} onChange={e => setShowEditDialog((s: any) => ({ ...s, cost_per_unit: e.target.value }))} /></div>
                 <div className="space-y-2"><Label>الحد الأدنى</Label><Input type="number" min="0" step="any" value={showEditDialog.min_stock_level} onChange={e => setShowEditDialog((s: any) => ({ ...s, min_stock_level: e.target.value }))} /></div>
                 <div className="space-y-2"><Label>الحد الأقصى</Label><Input type="number" min="0" step="any" value={showEditDialog.max_stock_level} onChange={e => setShowEditDialog((s: any) => ({ ...s, max_stock_level: e.target.value }))} /></div>
@@ -743,10 +743,10 @@ export default function Inventory() {
       </Dialog>
 
       <Dialog open={showMovementDialog} onOpenChange={setShowMovementDialog}>
-        <DialogContent><DialogHeader><DialogTitle>إضافة حركة مخزون</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-[95vw] md:max-w-lg max-h-[90dvh] overflow-y-auto"><DialogHeader><DialogTitle>إضافة حركة مخزون</DialogTitle></DialogHeader>
           <form onSubmit={handleAddMovement} className="grid gap-4 py-4">
             <div className="space-y-2"><Label>الصنف *</Label><Select value={movForm.item_id} onValueChange={v => setMovForm(f => ({ ...f, item_id: v }))}><SelectTrigger><SelectValue placeholder="اختر الصنف" /></SelectTrigger><SelectContent>{items.map((i: any) => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}</SelectContent></Select></div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>نوع الحركة</Label><Select value={movForm.movement_type} onValueChange={v => setMovForm(f => ({ ...f, movement_type: v, reason: v === 'waste' ? 'spoilage' : '' }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="purchase">شراء (إضافة)</SelectItem><SelectItem value="consumption">استهلاك (خصم)</SelectItem><SelectItem value="waste">هالك (خصم)</SelectItem><SelectItem value="adjustment_in">تسوية إضافة</SelectItem><SelectItem value="adjustment_out">تسوية خصم</SelectItem></SelectContent></Select></div>
               <div className="space-y-2"><Label>الكمية *</Label><Input type="number" min={0} step="any" value={movForm.quantity} onChange={e => setMovForm(f => ({ ...f, quantity: e.target.value as any }))} required /></div>
             </div>
@@ -770,11 +770,11 @@ export default function Inventory() {
       </Dialog>
 
       <Dialog open={!!editingMovement} onOpenChange={(open) => !open && setEditingMovement(null)}>
-        <DialogContent><DialogHeader><DialogTitle>تعديل حركة مخزون</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-[95vw] md:max-w-lg max-h-[90dvh] overflow-y-auto"><DialogHeader><DialogTitle>تعديل حركة مخزون</DialogTitle></DialogHeader>
           {editingMovement && (
             <form onSubmit={handleUpdateMovement} className="grid gap-4 py-4">
               <div className="space-y-2 text-muted-foreground bg-muted/30 p-2 rounded-md"><Label>الصنف: </Label> {items.find((i: any) => i.id === editingMovement.item_id)?.name || 'غير معروف'}</div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2"><Label>نوع الحركة</Label><Select value={editingMovement.movement_type} onValueChange={v => setEditingMovement((f: any) => ({ ...f, movement_type: v, reason: v === 'waste' ? 'spoilage' : '' }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="purchase">شراء (إضافة)</SelectItem><SelectItem value="consumption">استهلاك (خصم)</SelectItem><SelectItem value="waste">هالك (خصم)</SelectItem><SelectItem value="adjustment_in">تسوية إضافة</SelectItem><SelectItem value="adjustment_out">تسوية خصم</SelectItem></SelectContent></Select></div>
                 <div className="space-y-2"><Label>الكمية *</Label><Input type="number" min={0} step="any" value={editingMovement.quantity} onChange={e => setEditingMovement((f: any) => ({ ...f, quantity: e.target.value }))} required /></div>
               </div>
@@ -799,7 +799,7 @@ export default function Inventory() {
       </Dialog>
 
       <Dialog open={!!quickStock} onOpenChange={(open) => !open && setQuickStock(null)}>
-        <DialogContent className="max-w-md"><DialogHeader><DialogTitle>{quickStock?.type === 'in' ? 'إضافة رصيد' : 'صرف رصيد'} - {quickStock?.name}</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-[95vw] md:max-w-md max-h-[90dvh] overflow-y-auto"><DialogHeader><DialogTitle>{quickStock?.type === 'in' ? 'إضافة رصيد' : 'صرف رصيد'} - {quickStock?.name}</DialogTitle></DialogHeader>
           <form onSubmit={handleQuickStock} className="grid gap-4 py-4">
             <div className="space-y-2"><Label>الكمية</Label><Input type="number" min="0.01" step="0.01" autoFocus value={quickQty} onChange={e => setQuickQty(e.target.value)} required /></div>
             <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setQuickStock(null)}>إلغاء</Button><Button type="submit" variant={quickStock?.type === 'in' ? 'default' : 'destructive'}>{quickStock?.type === 'in' ? 'إضافة المخزون' : 'صرف المخزون'}</Button></div>

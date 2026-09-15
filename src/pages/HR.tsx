@@ -777,7 +777,7 @@ export default function HR() {
       }
     >
       {/* 1. Top KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3 mb-6">
         <Card className="bg-slate-900/50 border-slate-800">
           <CardContent className="p-3">
             <div className="flex items-center gap-2.5">
@@ -1120,7 +1120,90 @@ export default function HR() {
                 </select>
               </div>
 
-              <div className="overflow-x-auto rounded-lg border">
+              {/* Mobile Attendance Cards (< md) */}
+              <div className="md:hidden divide-y divide-border border rounded-lg bg-slate-950/20">
+                {filteredAttendance.length === 0 ? (
+                  <div className="text-center py-10 text-muted-foreground text-xs p-4">
+                    لا توجد سجلات حضور مسجلة لهذا التاريخ
+                  </div>
+                ) : (
+                  filteredAttendance.map((rec) => (
+                    <div key={rec.id} className="p-3.5 space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-bold text-slate-100 text-sm">{rec.employeeName}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {rec.employeeRole} • <span className="font-mono">{rec.date}</span>
+                          </p>
+                        </div>
+                        <div className="text-left">
+                          <Badge className={cn('text-[10px] border', statusColors[rec.status])}>
+                            {statusLabels[rec.status] || rec.status}
+                          </Badge>
+                          {rec.isManualCorrection && (
+                            <span className="block text-[9px] text-amber-400 mt-0.5 text-center">تعديل يدوي</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-1.5 text-center bg-slate-900/40 p-2 rounded-lg border border-slate-800/60 text-xs">
+                        <div>
+                          <span className="text-[10px] text-muted-foreground block">حضور</span>
+                          <span className="font-mono text-emerald-400 font-medium">{rec.checkIn || '-'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-muted-foreground block">انصراف</span>
+                          <span className="font-mono text-indigo-400 font-medium">{rec.checkOut || '-'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-muted-foreground block">ساعات</span>
+                          <span className="font-mono">{rec.hours > 0 ? `${rec.hours}س` : '-'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-muted-foreground block">تأخير</span>
+                          <span className="font-mono text-amber-400 font-bold">{rec.lateMinutes > 0 ? `${rec.lateMinutes}د` : '-'}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-1.5 pt-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setCorrectionRecord(rec);
+                            setCorrectionForm({
+                              employee_id: rec.employeeId,
+                              date: rec.date,
+                              checkIn: rec.checkIn || '09:00',
+                              checkOut: rec.checkOut || '17:00',
+                              status: rec.status || 'present',
+                              reason: rec.correctionReason || '',
+                            });
+                            setCorrectionModalOpen(true);
+                          }}
+                          className="h-8 text-xs gap-1"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                          تعديل
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeleteAttendanceRecord(rec)}
+                          className="h-8 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 gap-1"
+                          title="حذف سجل الحضور"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          حذف
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Desktop Attendance Table (>= md) */}
+              <div className="hidden md:block overflow-x-auto rounded-lg border">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1232,14 +1315,17 @@ export default function HR() {
 
               <div
                 ref={qrPrintRef}
-                className="bg-white p-4 rounded-2xl inline-block shadow-xl border border-slate-200 mb-4"
+                className="bg-white p-3 sm:p-4 rounded-2xl inline-block shadow-xl border border-slate-200 mb-4 max-w-full"
               >
-                <QRCodeSVG
-                  value={attendanceUrl}
-                  size={200}
-                  level="H"
-                  includeMargin={true}
-                />
+                <div className="w-[180px] sm:w-[220px] aspect-square mx-auto flex items-center justify-center">
+                  <QRCodeSVG
+                    value={attendanceUrl}
+                    size={undefined}
+                    className="w-full h-full"
+                    level="H"
+                    includeMargin={true}
+                  />
+                </div>
               </div>
 
               <p className="text-xs text-muted-foreground mb-4">
@@ -1671,7 +1757,7 @@ export default function HR() {
       {/* MODAL: ADD EMPLOYEE                                                       */}
       {/* ========================================================================= */}
       <Dialog open={isAddEmployeeOpen} onOpenChange={setIsAddEmployeeOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>إضافة موظف جديد</DialogTitle>
             <DialogDescription className="text-xs">
@@ -1791,7 +1877,7 @@ export default function HR() {
       {/* MODAL: EDIT EMPLOYEE                                                      */}
       {/* ========================================================================= */}
       <Dialog open={!!editingEmployee} onOpenChange={(open) => !open && setEditingEmployee(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>تعديل بيانات الموظف</DialogTitle>
           </DialogHeader>
@@ -1934,7 +2020,7 @@ export default function HR() {
       {/* MODAL: EMPLOYEE PROFILE & ATTENDANCE HISTORY                              */}
       {/* ========================================================================= */}
       <Dialog open={!!profileEmployee} onOpenChange={(open) => !open && setProfileEmployee(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
               <Avatar className="w-10 h-10 border border-slate-700">
@@ -2078,7 +2164,7 @@ export default function HR() {
       {/* MODAL: MANUAL ATTENDANCE CORRECTION                                       */}
       {/* ========================================================================= */}
       <Dialog open={correctionModalOpen} onOpenChange={setCorrectionModalOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {correctionRecord ? 'تصحيح وتعديل سجل الحضور' : 'إضافة حضور يدوي'}
@@ -2175,7 +2261,7 @@ export default function HR() {
       {/* MODAL: ADD / EDIT SHIFT                                                   */}
       {/* ========================================================================= */}
       <Dialog open={isAddShiftOpen} onOpenChange={setIsAddShiftOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingShift ? 'تعديل الوردية' : 'إضافة وردية جديدة'}</DialogTitle>
           </DialogHeader>
@@ -2261,7 +2347,7 @@ export default function HR() {
       {/* MODAL: DELETE ATTENDANCE RECORD CONFIRMATION                             */}
       {/* ========================================================================= */}
       <Dialog open={!!deleteAttendanceRecord} onOpenChange={(open) => !open && setDeleteAttendanceRecord(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-rose-500">
               <AlertTriangle className="w-5 h-5 text-rose-500" />

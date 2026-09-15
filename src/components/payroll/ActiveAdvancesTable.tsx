@@ -143,8 +143,8 @@ export const ActiveAdvancesTable: React.FC<ActiveAdvancesTableProps> = ({
 
       {/* 2. Filter & Action Toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
-        <div className="flex flex-1 items-center gap-2">
-          <div className="relative flex-1 max-w-sm">
+        <div className="flex flex-col sm:flex-row flex-1 items-stretch sm:items-center gap-2">
+          <div className="relative flex-1">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="بحث باسم الموظف أو ملاحظات السلفة..."
@@ -158,7 +158,7 @@ export const ActiveAdvancesTable: React.FC<ActiveAdvancesTableProps> = ({
             value={viewFilter}
             onValueChange={(val: any) => setViewFilter(val)}
           >
-            <SelectTrigger className="w-[180px] h-9 text-xs bg-slate-900/80 border-slate-700">
+            <SelectTrigger className="w-full sm:w-[180px] h-9 text-xs bg-slate-900/80 border-slate-700">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -172,15 +172,138 @@ export const ActiveAdvancesTable: React.FC<ActiveAdvancesTableProps> = ({
         <Button
           size="sm"
           onClick={onOpenCreateModal}
-          className="gap-1.5 text-xs h-9 bg-primary hover:bg-primary/90 text-primary-foreground font-bold shrink-0"
+          className="gap-1.5 text-xs h-9 bg-primary hover:bg-primary/90 text-primary-foreground font-bold shrink-0 w-full sm:w-auto"
         >
           <Plus className="w-4 h-4" />
           <span>إضافة سلفة جديدة</span>
         </Button>
       </div>
 
-      {/* 3. Advances Table */}
-      <div className="rounded-xl border border-slate-800 overflow-x-auto bg-slate-950/40">
+      {/* 3. Mobile Cards View (< md) */}
+      <div className="md:hidden space-y-3">
+        {filteredAdvances.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground p-4 bg-slate-900/30 rounded-xl border border-slate-800">
+            <HandCoins className="w-10 h-10 mx-auto mb-2 opacity-30 text-amber-400" />
+            <p className="text-sm">لا توجد سلف مطابقة للفلتر الحالي</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {viewFilter === 'active' ? 'لا توجد سلف نشطة قيد السداد حالياً' : 'لم يتم تسجيل أي سلف سابقة'}
+            </p>
+          </div>
+        ) : (
+          filteredAdvances.map((adv) => {
+            const paidAmt = adv.paidAmount || 0;
+            const remainingAmt = adv.remainingAmount ?? (adv.amount - paidAmt);
+            const isPartiallyPaid = paidAmt > 0;
+            const isCancelled = adv.status === 'cancelled';
+            const isFullyPaid = adv.status === 'paid' || remainingAmt <= 0;
+
+            return (
+              <div
+                key={adv.id}
+                className={`p-4 rounded-xl border border-slate-800 bg-slate-900/50 space-y-3 ${
+                  isCancelled ? 'opacity-70 bg-rose-950/10' : ''
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-300 shrink-0">
+                      {adv.employeeName?.charAt(0) || 'م'}
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-100 text-sm">{adv.employeeName}</p>
+                      <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {adv.startDate || adv.createdAt?.slice(0, 10)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {isCancelled ? (
+                    <Badge variant="destructive" className="text-[10px] gap-1">
+                      <Ban className="w-3 h-3" />
+                      ملغاة
+                    </Badge>
+                  ) : isFullyPaid ? (
+                    <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-[10px] gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      مسددة بالكامل
+                    </Badge>
+                  ) : isPartiallyPaid ? (
+                    <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[10px] gap-1">
+                      <Clock className="w-3 h-3" />
+                      مسددة جزئياً
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-sky-500/30 text-sky-400 text-[10px] gap-1">
+                      <Layers className="w-3 h-3" />
+                      نشطة
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center bg-slate-950/40 p-2.5 rounded-lg border border-slate-800/60">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block">مبلغ السلفة</span>
+                    <span className="font-mono font-bold text-xs text-slate-200">{adv.amount.toLocaleString('ar-EG')} ج.م</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block">المسدد</span>
+                    <span className="font-mono font-bold text-xs text-emerald-400">{paidAmt.toLocaleString('ar-EG')} ج.م</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block">المتبقي</span>
+                    <span className="font-mono font-bold text-xs text-amber-400">
+                      {isCancelled ? '0' : remainingAmt.toLocaleString('ar-EG')} ج.م
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <div className="text-[11px] text-slate-300">
+                    {adv.repaymentType === 'installments' ? (
+                      <span>{adv.numberOfInstallments} أقساط × {adv.installmentAmount?.toLocaleString('ar-EG')} ج.م</span>
+                    ) : (
+                      <span>خصم كامل من الراتب</span>
+                    )}
+                  </div>
+
+                  {!isCancelled && !isFullyPaid && (
+                    <div className="flex items-center gap-1.5">
+                      {!isPartiallyPaid && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onRequestDelete(adv)}
+                          disabled={isProcessing}
+                          className="h-7 px-2.5 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 gap-1 border border-rose-500/20"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>حذف</span>
+                        </Button>
+                      )}
+                      {isPartiallyPaid && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onRequestCancel(adv)}
+                          disabled={isProcessing}
+                          className="h-7 px-2.5 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 gap-1 border border-amber-500/20"
+                        >
+                          <Ban className="w-3.5 h-3.5" />
+                          <span>إلغاء</span>
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* 4. Desktop Table View (>= md) */}
+      <div className="hidden md:block rounded-xl border border-slate-800 overflow-x-auto bg-slate-950/40">
         <Table>
           <TableHeader className="bg-slate-900/70">
             <TableRow className="border-slate-800 hover:bg-transparent text-xs">

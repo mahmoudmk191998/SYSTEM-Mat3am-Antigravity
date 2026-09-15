@@ -126,7 +126,7 @@ export function MainLayout({ children, title, subtitle, actions }: MainLayoutPro
   const initials = displayName.charAt(0) || 'U';
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[100dvh] bg-background">
       <Sidebar />
 
       <motion.main
@@ -134,28 +134,28 @@ export function MainLayout({ children, title, subtitle, actions }: MainLayoutPro
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }}
         className={cn(
-          "min-h-screen pt-4 px-2 md:px-6 w-full max-w-[1800px] mx-auto relative transition-all duration-300",
-          bottomNavVisible ? "pb-28" : "pb-10"
+          "min-h-[100dvh] pt-2 md:pt-4 px-2 md:px-6 w-full max-w-[1800px] mx-auto relative transition-all duration-300",
+          bottomNavVisible ? "pb-28" : "pb-12"
         )}
       >
         {/* Top Header */}
         <header className={cn(
           "sticky top-0 z-40 transition-all duration-500",
           isMobile 
-            ? "glass border-b border-border/40 shadow-[0_4px_30px_rgba(0,0,0,0.03)]" 
+            ? "glass border-b border-border/40 shadow-[0_4px_30px_rgba(0,0,0,0.03)] safe-area-top" 
             : "mt-4 mx-6 rounded-[24px] glass-panel shadow-[0_8px_32px_rgba(0,0,0,0.04)]"
         )}>
-          <div className="flex items-center justify-between px-4 md:px-6 h-16 md:h-20">
+          <div className="flex items-center justify-between px-3 md:px-6 h-14 md:h-20">
             {/* Title Section */}
-            <div className="min-w-0 flex-1 flex items-center gap-3">
+            <div className="min-w-0 flex-1 flex items-center gap-2 md:gap-3">
               {isMobile && (
                 <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
                   <SheetTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-xl hover:bg-muted/80">
+                    <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-xl hover:bg-muted/80 touch-manipulation">
                       <Menu className="w-5 h-5 text-foreground" />
                     </Button>
                   </SheetTrigger>
-                  <SheetContent side="right" className="p-0 w-72 border-l border-border/40 font-cairo">
+                  <SheetContent side="right" className="p-0 w-72 max-w-[85vw] border-l border-border/40 font-cairo">
                     <SheetTitle className="sr-only">قائمة التنقل</SheetTitle>
                     <SheetDescription className="sr-only">عناصر التنقل للنظام</SheetDescription>
                     <SidebarContent isMobile={true} onNavigate={() => setMenuOpen(false)} />
@@ -163,8 +163,8 @@ export function MainLayout({ children, title, subtitle, actions }: MainLayoutPro
                 </Sheet>
               )}
               <div className="flex flex-col min-w-0">
-                {title && <h1 className="text-lg md:text-2xl font-black bg-gradient-to-l from-foreground to-foreground/70 bg-clip-text text-transparent truncate tracking-tight">{title}</h1>}
-                {subtitle && <p className="text-[13px] text-muted-foreground truncate hidden sm:block font-medium mt-0.5 opacity-80">{subtitle}</p>}
+                {title && <h1 className="text-base sm:text-lg md:text-2xl font-black bg-gradient-to-l from-foreground to-foreground/70 bg-clip-text text-transparent truncate tracking-tight">{title}</h1>}
+                {subtitle && <p className="text-[11px] sm:text-[13px] text-muted-foreground truncate hidden sm:block font-medium mt-0.5 opacity-80">{subtitle}</p>}
               </div>
             </div>
 
@@ -305,11 +305,13 @@ export function MainLayout({ children, title, subtitle, actions }: MainLayoutPro
           </div>
           {/* Mobile Actions Below Header */}
           {isMobile && actions && (
-            <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto hide-scrollbar">{actions}</div>
+            <div className="px-3 sm:px-4 pb-3 flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full">
+              {actions}
+            </div>
           )}
         </header>
 
-        <div className="p-3 md:p-6">
+        <div className="p-2 sm:p-4 md:p-6 pb-24 md:pb-12">
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
             {children}
           </motion.div>

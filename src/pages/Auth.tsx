@@ -130,7 +130,7 @@ export default function Auth() {
 
   if (!isActivated) {
     return (
-      <div className="min-h-screen bg-[#080b11] text-white flex items-center justify-center p-4 relative overflow-hidden font-cairo">
+      <div className="min-h-[100dvh] bg-[#080b11] text-white flex items-center justify-center p-3 sm:p-4 relative overflow-hidden font-cairo safe-area-inset-top safe-area-inset-bottom">
         {/* Ambient background glows */}
         <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
         <div className="absolute bottom-0 left-1/4 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
@@ -145,10 +145,10 @@ export default function Auth() {
           className="w-full max-w-md relative z-10"
         >
           {/* Glassmorphism Card */}
-          <Card className="border-0 bg-[#0d121f]/60 backdrop-blur-[32px] shadow-[0_30px_60px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.05)] rounded-[32px] overflow-hidden p-8 text-center space-y-6">
+          <Card className="border-0 bg-[#0d121f]/60 backdrop-blur-[32px] shadow-[0_30px_60px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.05)] rounded-2xl sm:rounded-[32px] overflow-hidden p-5 sm:p-8 text-center space-y-5 sm:space-y-6">
             
             {/* Pulsing Lock/Key Icon */}
-            <div className="relative w-24 h-24 mx-auto mb-2 flex items-center justify-center">
+            <div className="relative w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-2 flex items-center justify-center">
               {/* Outer pulsing ring */}
               <motion.div 
                 animate={{ scale: [1, 1.15, 1], opacity: [0.15, 0.3, 0.15] }}
@@ -163,31 +163,32 @@ export default function Auth() {
                 className="absolute inset-0 rounded-full border border-dashed border-emerald-500/30"
               />
 
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-emerald-400 p-[1px] shadow-[0_0_20px_rgba(16,185,129,0.3)] flex items-center justify-center relative z-10">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-emerald-400 p-[1px] shadow-[0_0_20px_rgba(16,185,129,0.3)] flex items-center justify-center relative z-10">
                 <div className="w-full h-full rounded-[14px] bg-[#0d121f]/90 flex items-center justify-center">
-                  <KeyRound className="w-8 h-8 text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.5)] animate-pulse" />
+                  <KeyRound className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.5)] animate-pulse" />
                 </div>
               </div>
             </div>
 
             <div className="space-y-2">
-              <h2 className="text-2xl font-black text-white drop-shadow-sm">تنشيط النظام</h2>
+              <h2 className="text-xl sm:text-2xl font-black text-white drop-shadow-sm">تنشيط النظام</h2>
               <p className="text-xs text-slate-400 leading-relaxed font-semibold max-w-xs mx-auto">
                 الرجاء إدخال رمز الأمان المكون من 4 أرقام لتنشيط صلاحية النظام للعمل على هذا الجهاز.
               </p>
             </div>
 
-            <form onSubmit={handleActivate} className="space-y-6">
+            <form onSubmit={handleActivate} className="space-y-5 sm:space-y-6">
               <div className="space-y-3">
                 <div className="relative">
                   <Input
                     type="password"
+                    inputMode="numeric"
                     maxLength={4}
                     value={activationInput}
                     onChange={(e) => setActivationInput(e.target.value.replace(/\D/g, ''))}
                     placeholder="••••"
                     className={cn(
-                      "w-48 mx-auto text-center font-bold text-3xl h-16 bg-black/40 border-white/10 text-white tracking-[0.8em] pl-[0.8em] focus-visible:ring-emerald-500/50 rounded-2xl transition-all duration-300",
+                      "w-44 sm:w-48 mx-auto text-center font-bold text-2xl sm:text-3xl h-14 sm:h-16 bg-black/40 border-white/10 text-white tracking-[0.8em] pl-[0.8em] focus-visible:ring-emerald-500/50 rounded-2xl transition-all duration-300",
                       activationError && "border-red-500 ring-2 ring-red-500/20"
                     )}
                     dir="ltr"
@@ -199,7 +200,7 @@ export default function Auth() {
 
               <Button 
                 type="submit" 
-                className="w-full h-14 font-bold text-base bg-gradient-to-l from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-[0_8px_25px_rgba(16,185,129,0.2)] hover:shadow-[0_8px_30px_rgba(16,185,129,0.4)] transition-all rounded-2xl border-0"
+                className="w-full h-12 sm:h-14 font-bold text-sm sm:text-base bg-gradient-to-l from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-[0_8px_25px_rgba(16,185,129,0.2)] hover:shadow-[0_8px_30px_rgba(16,185,129,0.4)] transition-all rounded-2xl border-0"
               >
                 تنشيط الصلاحية
               </Button>
@@ -215,7 +216,7 @@ export default function Auth() {
   }
 
   return (
-    <div className="min-h-screen bg-[#080b11] text-white flex items-stretch overflow-hidden font-cairo">
+    <div className="min-h-[100dvh] bg-[#080b11] text-white flex items-stretch overflow-x-hidden font-cairo safe-area-inset-top safe-area-inset-bottom">
       {/* Ambient background glows */}
       <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-0 left-1/4 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
@@ -286,16 +287,16 @@ export default function Auth() {
       </div>
 
       {/* Left Side Pane - Form (takes full width on mobile) */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative">
-        <div className="w-full max-w-md space-y-8">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-4 sm:p-8 lg:p-12 relative">
+        <div className="w-full max-w-md space-y-6 sm:space-y-8">
           
           {/* Logo only shown on mobile */}
-          <div className="flex lg:hidden flex-col items-center text-center space-y-4 mb-2">
-            <div className="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center p-2 backdrop-blur-md shadow-2xl">
+          <div className="flex lg:hidden flex-col items-center text-center space-y-3 sm:space-y-4 mb-2">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center p-2 backdrop-blur-md shadow-2xl">
               <img src={mkLogo} alt="MK" className="w-full h-full object-contain mix-blend-screen brightness-125" />
             </div>
             <div>
-              <h1 className="text-3xl font-black text-white">إم كـي سيستم</h1>
+              <h1 className="text-2xl sm:text-3xl font-black text-white">إم كـي سيستم</h1>
               <p className="text-emerald-400 text-xs mt-1 font-bold">نظام إدارة المطاعم المتقدم</p>
             </div>
           </div>
@@ -306,7 +307,7 @@ export default function Auth() {
             transition={{ duration: 0.5 }}
           >
             {/* Glassmorphism Card */}
-            <Card className="border-0 bg-[#0d121f]/60 backdrop-blur-[32px] shadow-[0_30px_60px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.05)] rounded-[28px] overflow-hidden">
+            <Card className="border-0 bg-[#0d121f]/60 backdrop-blur-[32px] shadow-[0_30px_60px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.05)] rounded-2xl sm:rounded-[28px] overflow-hidden">
               <Tabs 
                 defaultValue="login"
                 onValueChange={(val) => {
@@ -317,19 +318,19 @@ export default function Auth() {
                 }}
               >
                 <CardHeader className="p-0 border-b border-white/5">
-                  <TabsList className="w-full bg-black/20 border-0 rounded-none h-16 p-0 gap-0">
-                    <TabsTrigger value="login" className="flex-1 rounded-none h-full gap-2 data-[state=active]:bg-white/[0.03] data-[state=active]:text-white text-slate-400 data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 font-bold text-sm transition-all focus-visible:ring-0">
+                  <TabsList className="w-full bg-black/20 border-0 rounded-none h-14 sm:h-16 p-0 gap-0">
+                    <TabsTrigger value="login" className="flex-1 rounded-none h-full gap-2 data-[state=active]:bg-white/[0.03] data-[state=active]:text-white text-slate-400 data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 font-bold text-xs sm:text-sm transition-all focus-visible:ring-0">
                       <LogIn className="w-4 h-4" />
                       تسجيل الدخول
                     </TabsTrigger>
-                    <TabsTrigger value="signup" className="flex-1 rounded-none h-full gap-2 data-[state=active]:bg-white/[0.03] data-[state=active]:text-white text-slate-400 data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 font-bold text-sm transition-all focus-visible:ring-0">
+                    <TabsTrigger value="signup" className="flex-1 rounded-none h-full gap-2 data-[state=active]:bg-white/[0.03] data-[state=active]:text-white text-slate-400 data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 font-bold text-xs sm:text-sm transition-all focus-visible:ring-0">
                       <UserPlus className="w-4 h-4" />
                       حساب جديد
                     </TabsTrigger>
                   </TabsList>
                 </CardHeader>
 
-                <CardContent className="p-8">
+                <CardContent className="p-5 sm:p-8">
                   <TabsContent value="login" className="mt-0 space-y-6 outline-none">
                     <div className="space-y-1">
                       <h3 className="text-xl font-black text-white">أهلاً بك مجدداً</h3>
@@ -492,7 +493,7 @@ export default function Auth() {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                           <div className="space-y-2">
                             <Label className="text-slate-300 text-xs font-semibold uppercase tracking-wider">كلمة المرور</Label>
                             <Input

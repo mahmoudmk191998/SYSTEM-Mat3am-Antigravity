@@ -208,7 +208,7 @@ export default function AttendancePublic() {
   // Render: Loading Screen
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col items-center justify-center p-4" dir="rtl">
+      <div className="min-h-[100dvh] safe-area-inset bg-slate-950 text-slate-50 flex flex-col items-center justify-center p-4" dir="rtl">
         <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4" />
         <p className="text-slate-400 font-medium">جاري تجهيز شاشة تسجيل الحضور والانصراف...</p>
       </div>
@@ -218,7 +218,7 @@ export default function AttendancePublic() {
   // Render: Invalid Token Error
   if (initError || !sessionInfo) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center p-4" dir="rtl">
+      <div className="min-h-[100dvh] safe-area-inset bg-slate-950 text-slate-50 flex items-center justify-center p-4" dir="rtl">
         <Card className="max-w-md w-full bg-slate-900 border-rose-900/50 shadow-2xl p-6 text-center">
           <div className="w-16 h-16 rounded-full bg-rose-500/10 text-rose-500 mx-auto flex items-center justify-center mb-4">
             <ShieldAlert className="w-8 h-8" />
@@ -237,9 +237,9 @@ export default function AttendancePublic() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 flex flex-col" dir="rtl">
+    <div className="min-h-[100dvh] safe-area-inset bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 flex flex-col" dir="rtl">
       {/* Top Header */}
-      <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-20 px-4 py-3">
+      <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-20 px-4 py-3 safe-area-top">
         <div className="max-w-md mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center font-bold">
@@ -345,7 +345,7 @@ export default function AttendancePublic() {
               exit={{ opacity: 0, x: -20 }}
               className="my-auto"
             >
-              <Card className="bg-slate-900/90 border-slate-800 backdrop-blur-xl shadow-2xl p-6">
+              <Card className="bg-slate-900/90 border-slate-800 backdrop-blur-xl shadow-2xl p-4 sm:p-6">
                 {/* Back button */}
                 <button
                   type="button"
@@ -382,7 +382,7 @@ export default function AttendancePublic() {
                   </label>
 
                   {/* 4 Digit Boxes */}
-                  <div className="flex justify-center gap-3 dir-ltr" dir="ltr">
+                  <div className="flex justify-center gap-2 sm:gap-3 dir-ltr" dir="ltr">
                     {pinDigits.map((digit, idx) => (
                       <input
                         key={idx}
@@ -396,7 +396,7 @@ export default function AttendancePublic() {
                         onKeyDown={(e) => handlePinKeyDown(idx, e)}
                         autoFocus={idx === 0}
                         className={cn(
-                          'w-14 h-16 text-center text-2xl font-bold rounded-xl border bg-slate-950 text-slate-100 transition-all focus:outline-none focus:ring-2 focus:ring-primary',
+                          'w-12 h-14 sm:w-14 sm:h-16 text-center text-xl sm:text-2xl font-bold rounded-xl border bg-slate-950 text-slate-100 transition-all focus:outline-none focus:ring-2 focus:ring-primary',
                           digit ? 'border-primary shadow-lg shadow-primary/20' : 'border-slate-800'
                         )}
                       />
@@ -532,7 +532,7 @@ export default function AttendancePublic() {
       </main>
 
       {/* Footer */}
-      <footer className="py-3 text-center text-[11px] text-slate-600 border-t border-slate-900">
+      <footer className="py-3 text-center text-[11px] text-slate-600 border-t border-slate-900 safe-area-bottom">
         نظام إدارة المطعم الذكي • الحضور والانصراف الآمن
       </footer>
     </div>

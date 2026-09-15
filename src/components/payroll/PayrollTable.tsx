@@ -332,7 +332,7 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
               </div>
 
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[140px] h-9 text-xs bg-slate-900/80 border-slate-700">
+                <SelectTrigger className="w-full sm:w-[140px] h-9 text-xs bg-slate-900/80 border-slate-700">
                   <SelectValue placeholder="حالة الدفع" />
                 </SelectTrigger>
                 <SelectContent>
@@ -368,16 +368,168 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
             isProcessing={isSubmittingPayment}
           />
         ) : (
-          <div className="border-t border-slate-800 overflow-x-auto">
-          <Table>
-            <TableHeader className="bg-slate-900/70">
-              <TableRow className="border-slate-800 hover:bg-transparent text-xs">
-                <TableHead className="text-right">الموظف</TableHead>
-                <TableHead className="text-center">الأساسي</TableHead>
-                <TableHead className="text-center">الإضافي والبدلات</TableHead>
-                <TableHead className="text-center">خصم الحضور</TableHead>
-                <TableHead className="text-center">أقساط السلف</TableHead>
-                <TableHead className="text-center">المستحق (الصافي)</TableHead>
+          <>
+            {/* Mobile Cards View (< md) */}
+            <div className="md:hidden divide-y divide-slate-800 border-t border-slate-800">
+              {filteredRecords.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground text-xs p-4">
+                  لا يوجد موظفون أو بيانات رواتب تطابق الفترة وشروط البحث
+                </div>
+              ) : (
+                filteredRecords.map((rec) => {
+                  const empPayments = allPayments.filter(
+                    (p) => p.employeeId === rec.employeeId && p.payrollPeriod === currentPeriod
+                  );
+
+                  return (
+                    <div key={rec.id} className="p-4 space-y-3 bg-slate-950/20">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-bold text-slate-100 text-sm">{rec.employeeName}</p>
+                          <p className="text-[11px] text-muted-foreground">{rec.employeeRole}</p>
+                        </div>
+                        <Badge className={`text-[10px] border ${statusBadgeStyles[rec.status] || ''}`}>
+                          {statusLabels[rec.status] || rec.status}
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs bg-slate-900/40 p-2.5 rounded-lg border border-slate-800/60">
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">الأساسي:</span>
+                          <span className="font-mono text-slate-200">{rec.basicSalarySnapshot.toLocaleString('ar-EG')} ج.م</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">الإضافي:</span>
+                          <span className="font-mono text-emerald-400">+{ (rec.overtime + rec.bonuses + rec.allowances).toLocaleString('ar-EG') }</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">الخصومات والسلف:</span>
+                          <span className="font-mono text-rose-400">
+                            -{(rec.attendanceDeductions + rec.advanceDeductions).toLocaleString('ar-EG')}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">الصافي:</span>
+                          <span className="font-mono font-bold text-slate-100">{rec.netSalary.toLocaleString('ar-EG')} ج.م</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 text-xs">
+                        <div>
+                          <span className="text-muted-foreground text-[11px]">المتبقي: </span>
+                          <span className="font-mono font-bold text-rose-400">{rec.remaining.toLocaleString('ar-EG')} ج.م</span>
+                          {rec.totalPaid > 0 && (
+                            <span className="text-muted-foreground text-[10px] mr-1">
+                              (مدفوع: {rec.totalPaid.toLocaleString('ar-EG')})
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          {rec.remaining > 0 ? (
+                            <Button
+                              size="sm"
+                              onClick={() => setSelectedPayrollForPayment(rec)}
+                              className="h-8 px-3 text-xs bg-primary hover:bg-primary/90 gap-1"
+                            >
+                              <DollarSign className="w-3.5 h-3.5" />
+                              <span>صرف</span>
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled
+                              className="h-8 px-2.5 text-[11px] border-emerald-500/30 text-emerald-400 opacity-80"
+                            >
+                              <CheckCircle2 className="w-3 h-3 ml-1" />
+                              مسدد
+                            </Button>
+                          )}
+
+                          {empPayments.length > 0 && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                                  <History className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-64 max-w-[85vw]">
+                                <div className="px-2 py-1.5 text-[11px] font-bold text-muted-foreground">
+                                  دفعات شهر {currentPeriod} ({empPayments.length})
+                                </div>
+                                <DropdownMenuSeparator />
+                                {empPayments.map((p) => {
+                                  const isVoided = p.status === 'voided';
+                                  return (
+                                    <div
+                                      key={p.id}
+                                      className={`px-2 py-1.5 text-xs flex items-center justify-between rounded ${
+                                        isVoided ? 'bg-rose-950/20 opacity-70' : 'hover:bg-slate-800/50'
+                                      }`}
+                                    >
+                                      <div className="flex-1 pr-1">
+                                        <div className="flex items-center gap-1.5">
+                                          <p
+                                            className={`font-mono font-bold ${
+                                              isVoided
+                                                ? 'text-rose-400 line-through text-[11px]'
+                                                : 'text-emerald-400'
+                                            }`}
+                                          >
+                                            {p.amount.toLocaleString('ar-EG')} ج.م
+                                          </p>
+                                          {isVoided && (
+                                            <Badge variant="destructive" className="text-[9px] px-1 py-0 h-4">
+                                              ملغي
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <p className="text-[10px] text-muted-foreground">
+                                          {p.paymentMethod} • {p.createdAt.split('T')[0]}
+                                        </p>
+                                        {isVoided && p.voidReason && (
+                                          <p className="text-[9px] text-rose-300 italic truncate max-w-[150px]" title={p.voidReason}>
+                                            سبب: {p.voidReason}
+                                          </p>
+                                        )}
+                                      </div>
+                                      {!isVoided && (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => handleVoidPaymentClick(p)}
+                                          className="h-6 w-6 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10"
+                                          title="إلغاء الدفعة"
+                                        >
+                                          <RotateCcw className="w-3 h-3" />
+                                        </Button>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Desktop Table View (>= md) */}
+            <div className="hidden md:block border-t border-slate-800 overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-slate-900/70">
+                  <TableRow className="border-slate-800 hover:bg-transparent text-xs">
+                    <TableHead className="text-right">الموظف</TableHead>
+                    <TableHead className="text-center">الأساسي</TableHead>
+                    <TableHead className="text-center">الإضافي والبدلات</TableHead>
+                    <TableHead className="text-center">خصم الحضور</TableHead>
+                    <TableHead className="text-center">أقساط السلف</TableHead>
+                    <TableHead className="text-center">المستحق (الصافي)</TableHead>
                 <TableHead className="text-center">المدفوع</TableHead>
                 <TableHead className="text-center">المتبقي</TableHead>
                 <TableHead className="text-center">الحالة</TableHead>
@@ -578,6 +730,7 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
             )}
           </Table>
         </div>
+        </>
         )}
       </CardContent>
 

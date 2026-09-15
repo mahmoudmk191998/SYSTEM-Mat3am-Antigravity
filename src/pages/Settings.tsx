@@ -903,7 +903,7 @@ export default function Settings() {
         {/* Units Settings */}
         <TabsContent value="units" className="space-y-6">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <Scale className="w-5 h-5" />
@@ -911,18 +911,18 @@ export default function Settings() {
                 </CardTitle>
                 <CardDescription>إدارة وحدات القياس المستخدمة في المخزون والوصفات</CardDescription>
               </div>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={async () => await seedStandardUnits()}>
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                <Button variant="outline" size="sm" onClick={async () => await seedStandardUnits()}>
                   استعادة الوحدات الافتراضية
                 </Button>
-                <Button onClick={() => setNewUnitMode(true)}>
+                <Button size="sm" onClick={() => setNewUnitMode(true)}>
                   إضافة وحدة
                 </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {newUnitMode && (
-                <div className="p-4 bg-muted rounded-lg flex items-end gap-2 mb-4">
+                <div className="p-4 bg-muted rounded-lg flex flex-col sm:flex-row items-stretch sm:items-end gap-2 mb-4">
                   <div className="space-y-2 flex-1">
                     <Label>اسم الوحدة</Label>
                     <Input value={newUnit.name} onChange={e => setNewUnit({...newUnit, name: e.target.value})} placeholder="مثال: كيلوجرام" />
@@ -944,22 +944,24 @@ export default function Settings() {
                       <option value="length">طول</option>
                     </select>
                   </div>
-                  <Button onClick={async () => {
-                    if(!newUnit.name || !newUnit.abbreviation) return toast.error('يرجى تعبئة الحقول المطلوبة');
-                    if(await addUnit(newUnit)) {
-                      setNewUnitMode(false);
-                      setNewUnit({ name: '', abbreviation: '', type: 'count' });
-                    }
-                  }}>
-                    حفظ
-                  </Button>
-                  <Button variant="ghost" onClick={() => setNewUnitMode(false)}>
-                    إلغاء
-                  </Button>
+                  <div className="flex items-center gap-2 pt-2 sm:pt-0">
+                    <Button className="flex-1 sm:flex-none" onClick={async () => {
+                      if(!newUnit.name || !newUnit.abbreviation) return toast.error('يرجى تعبئة الحقول المطلوبة');
+                      if(await addUnit(newUnit)) {
+                        setNewUnitMode(false);
+                        setNewUnit({ name: '', abbreviation: '', type: 'count' });
+                      }
+                    }}>
+                      حفظ
+                    </Button>
+                    <Button className="flex-1 sm:flex-none" variant="ghost" onClick={() => setNewUnitMode(false)}>
+                      إلغاء
+                    </Button>
+                  </div>
                 </div>
               )}
               
-              <div className="rounded-md border">
+              <div className="rounded-md border overflow-x-auto">
                 <table className="w-full text-sm text-right">
                   <thead className="bg-muted/50 border-b">
                     <tr>
@@ -1004,7 +1006,7 @@ export default function Settings() {
 
         {/* Save Button */}
         <div className="flex justify-end pt-4 border-t">
-          <Button onClick={handleSave} disabled={isSaving} className="gap-2 min-w-[160px]">
+          <Button onClick={handleSave} disabled={isSaving} className="gap-2 w-full sm:w-auto sm:min-w-[160px]">
             {isSaving ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />

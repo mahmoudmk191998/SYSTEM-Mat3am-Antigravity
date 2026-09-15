@@ -606,7 +606,79 @@ export default function Expenses() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="rounded-md border border-border/50 overflow-hidden">
+            {/* Mobile Cards View (< md) */}
+            <div className="md:hidden divide-y divide-border/50 border rounded-lg border-border/50 bg-slate-950/20">
+              {loading ? (
+                <div className="h-32 flex justify-center items-center">
+                  <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : filteredAndCategorizedExpenses.length === 0 ? (
+                <div className="py-8 text-center text-muted-foreground p-4">
+                  <Receipt className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">لا توجد مصروفات تطابق شروط البحث والفترة الزمنية</p>
+                </div>
+              ) : (
+                filteredAndCategorizedExpenses.map((expense) => {
+                  const isVoided = expense.status === 'voided';
+                  return (
+                    <div key={expense.id} className={`p-3.5 space-y-2.5 ${isVoided ? 'bg-rose-950/10 text-muted-foreground' : ''}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={selectedExpenses.includes(expense.id)}
+                            onCheckedChange={(c) => {
+                              if (c) setSelectedExpenses(prev => [...prev, expense.id]);
+                              else setSelectedExpenses(prev => prev.filter(id => id !== expense.id));
+                            }}
+                          />
+                          <div>
+                            <span className="text-xs text-muted-foreground font-mono">
+                              {format(new Date(expense.date), 'dd MMMM yyyy', { locale: ar })}
+                            </span>
+                            <p className={`font-semibold text-sm text-slate-100 ${isVoided ? 'line-through text-slate-400' : ''}`}>
+                              {expense.description}
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`font-bold text-sm shrink-0 ${isVoided ? 'line-through text-slate-500' : 'text-destructive'}`}>
+                          {expense.amount.toLocaleString('ar-EG')} ج.م
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs pt-1">
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant="secondary" className="text-[10px]">
+                            {expense.category}
+                          </Badge>
+                          {isVoided && (
+                            <Badge variant="destructive" className="text-[9px] px-1 py-0 h-4">
+                              ملغي
+                            </Badge>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => setViewingExpense(expense)}>
+                            <Eye className="w-3.5 h-3.5" />
+                          </Button>
+                          {!isVoided && (
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => setEditingExpense(expense)}>
+                              <Edit className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(expense.id)}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Desktop Table View (>= md) */}
+            <div className="hidden md:block rounded-md border border-border/50 overflow-hidden">
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow>
@@ -732,7 +804,7 @@ export default function Expenses() {
         />
 
         <Dialog open={!!editingExpense} onOpenChange={(open) => !open && setEditingExpense(null)}>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-[425px] max-h-[90dvh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>تعديل المصروف</DialogTitle>
             </DialogHeader>
@@ -768,7 +840,7 @@ export default function Expenses() {
 
         {/* View Details Dialog */}
         <Dialog open={!!viewingExpense} onOpenChange={(open) => !open && setViewingExpense(null)}>
-          <DialogContent className="sm:max-w-[420px] overflow-hidden p-0 rounded-2xl border bg-background shadow-2xl">
+          <DialogContent className="sm:max-w-[420px] max-h-[90dvh] overflow-y-auto p-0 rounded-2xl border bg-background shadow-2xl">
             {viewingExpense && (
               <div className="flex flex-col relative w-full h-full bg-background">
                 {/* Header Section (Receipt Top) */}

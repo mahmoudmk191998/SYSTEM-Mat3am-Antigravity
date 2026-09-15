@@ -204,7 +204,7 @@ export default function TablesReservations() {
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
             <Card className="bg-primary/5 border-primary/20">
               <CardContent className="p-4 flex flex-col justify-center">
                 <div className="flex justify-between items-center mb-2">
@@ -359,7 +359,7 @@ export default function TablesReservations() {
         </TabsContent>
 
         <TabsContent value="reservations" className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
             <Card className="bg-primary/5 border-primary/20"><CardContent className="p-4 text-center"><p className="text-3xl font-black text-primary">{reservations.length}</p><p className="text-sm font-medium text-muted-foreground mt-1">إجمالي الحجوزات</p></CardContent></Card>
             <Card className="bg-emerald-500/5 border-emerald-500/20"><CardContent className="p-4 text-center"><p className="text-3xl font-black text-emerald-500">{reservations.filter((r: any) => r.status === 'confirmed').length}</p><p className="text-sm font-medium text-muted-foreground mt-1">المسجلة والتامة</p></CardContent></Card>
             <Card className="bg-amber-500/5 border-amber-500/20"><CardContent className="p-4 text-center"><p className="text-3xl font-black text-amber-500">{reservations.filter((r: any) => r.status === 'pending').length}</p><p className="text-sm font-medium text-muted-foreground mt-1">ترقب الوصول</p></CardContent></Card>
@@ -473,14 +473,14 @@ export default function TablesReservations() {
 
       {/* Add Reservation Dialog */}
       <Dialog open={showNewReservation} onOpenChange={setShowNewReservation}>
-        <DialogContent className="max-w-[95vw] md:max-w-lg">
+        <DialogContent className="max-w-[95vw] md:max-w-lg max-h-[90dvh] overflow-y-auto">
           <DialogHeader><DialogTitle>إضافة حجز جديد</DialogTitle></DialogHeader>
           <form onSubmit={handleAddReservation} className="space-y-4 py-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>اسم العميل *</Label><Input value={resForm.customer_name} onChange={e => setResForm(f => ({ ...f, customer_name: e.target.value }))} placeholder="أدخل اسم العميل" required /></div>
               <div className="space-y-2"><Label>رقم الهاتف *</Label><Input value={resForm.customer_phone} onChange={e => setResForm(f => ({ ...f, customer_phone: e.target.value }))} placeholder="01xxxxxxxxx" type="tel" required /></div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-2"><Label>الأشخاص</Label><Input type="number" min={1} value={resForm.guests_count} onChange={e => setResForm(f => ({ ...f, guests_count: Number(e.target.value) }))} /></div>
               <div className="space-y-2"><Label>التاريخ *</Label><Input type="date" value={resForm.reservation_date} onChange={e => setResForm(f => ({ ...f, reservation_date: e.target.value }))} required /></div>
               <div className="space-y-2"><Label>الوقت *</Label><Input type="time" value={resForm.reservation_time} onChange={e => setResForm(f => ({ ...f, reservation_time: e.target.value }))} required /></div>
@@ -493,13 +493,13 @@ export default function TablesReservations() {
 
       {/* Add Table Dialog */}
       <Dialog open={showAddTable} onOpenChange={setShowAddTable}>
-        <DialogContent>
+        <DialogContent className="max-w-[95vw] md:max-w-md max-h-[90dvh] overflow-y-auto">
           <DialogHeader><DialogTitle>إضافة طاولة جديدة</DialogTitle></DialogHeader>
           <form onSubmit={handleAddTable} className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>رقم/اسم الطاولة</Label><Input type="text" value={tableForm.table_number} onChange={e => setTableForm(f => ({ ...f, table_number: e.target.value as any }))} required /></div>
               <div className="space-y-2"><Label>عدد المقاعد</Label><Input type="number" min={1} value={tableForm.seats} onChange={e => setTableForm(f => ({ ...f, seats: Number(e.target.value) }))} required /></div>
-              <div className="space-y-2 col-span-2"><Label>الجناح / المنطقة</Label><Input type="text" placeholder="مثال: القاعة الرئيسية، التراس..." value={tableForm.zone_id} onChange={e => setTableForm(f => ({ ...f, zone_id: e.target.value }))} /></div>
+              <div className="space-y-2 sm:col-span-2"><Label>الجناح / المنطقة</Label><Input type="text" placeholder="مثال: القاعة الرئيسية، التراس..." value={tableForm.zone_id} onChange={e => setTableForm(f => ({ ...f, zone_id: e.target.value }))} /></div>
             </div>
             <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setShowAddTable(false)}>إلغاء</Button><Button type="submit">إضافة</Button></div>
           </form>
@@ -508,14 +508,14 @@ export default function TablesReservations() {
 
       {/* Edit Table Dialog */}
       <Dialog open={!!showEditTable} onOpenChange={() => setShowEditTable(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-[95vw] md:max-w-md max-h-[90dvh] overflow-y-auto">
           <DialogHeader><DialogTitle>تعديل الطاولة</DialogTitle></DialogHeader>
           {showEditTable && (
             <form onSubmit={handleUpdateTable} className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2"><Label>رقم/اسم الطاولة</Label><Input type="text" value={showEditTable.table_number} onChange={e => setShowEditTable((t: any) => ({ ...t, table_number: e.target.value }))} required /></div>
                 <div className="space-y-2"><Label>عدد المقاعد</Label><Input type="number" min={1} value={showEditTable.seats} onChange={e => setShowEditTable((t: any) => ({ ...t, seats: Number(e.target.value) }))} required /></div>
-                <div className="space-y-2 col-span-2"><Label>الجناح / المنطقة</Label><Input type="text" value={showEditTable.zone_id || ''} onChange={e => setShowEditTable((t: any) => ({ ...t, zone_id: e.target.value }))} /></div>
+                <div className="space-y-2 sm:col-span-2"><Label>الجناح / المنطقة</Label><Input type="text" value={showEditTable.zone_id || ''} onChange={e => setShowEditTable((t: any) => ({ ...t, zone_id: e.target.value }))} /></div>
               </div>
               <div className="space-y-2">
                 <Label>الحالة</Label>
@@ -537,7 +537,7 @@ export default function TablesReservations() {
 
       {/* Edit Reservation Dialog */}
       <Dialog open={!!showEditReservation} onOpenChange={() => setShowEditReservation(null)}>
-        <DialogContent className="max-w-[95vw] md:max-w-lg">
+        <DialogContent className="max-w-[95vw] md:max-w-lg max-h-[90dvh] overflow-y-auto">
           <DialogHeader><DialogTitle>تعديل الحجز</DialogTitle></DialogHeader>
           {showEditReservation && (
             <form onSubmit={handleUpdateReservation} className="space-y-4 py-4">
@@ -545,7 +545,7 @@ export default function TablesReservations() {
                 <div className="space-y-2"><Label>اسم العميل *</Label><Input value={showEditReservation.customer_name} onChange={e => setShowEditReservation((r: any) => ({ ...r, customer_name: e.target.value }))} required /></div>
                 <div className="space-y-2"><Label>رقم الهاتف *</Label><Input value={showEditReservation.customer_phone} onChange={e => setShowEditReservation((r: any) => ({ ...r, customer_phone: e.target.value }))} type="tel" required /></div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-2"><Label>الأشخاص</Label><Input type="number" min={1} value={showEditReservation.guests_count} onChange={e => setShowEditReservation((r: any) => ({ ...r, guests_count: Number(e.target.value) }))} /></div>
                 <div className="space-y-2"><Label>التاريخ *</Label><Input type="date" value={showEditReservation.reservation_date} onChange={e => setShowEditReservation((r: any) => ({ ...r, reservation_date: e.target.value }))} required /></div>
                 <div className="space-y-2"><Label>الوقت *</Label><Input type="time" value={showEditReservation.reservation_time} onChange={e => setShowEditReservation((r: any) => ({ ...r, reservation_time: e.target.value }))} required /></div>

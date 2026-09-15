@@ -472,9 +472,9 @@ export default function OrdersHistory() {
             />
           </div>
           
-          <div className="flex gap-2">
+          <div className="flex gap-2 w-full md:w-auto">
             <select 
-              className="flex h-10 w-[150px] items-center justify-between rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex-1 md:w-[150px] flex h-10 items-center justify-between rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -488,7 +488,7 @@ export default function OrdersHistory() {
             </select>
             
             <select 
-              className="flex h-10 w-[150px] items-center justify-between rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex-1 md:w-[150px] flex h-10 items-center justify-between rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
             >
@@ -501,7 +501,7 @@ export default function OrdersHistory() {
         </CardContent>
       </Card>
 
-      {/* Modern Table Layout */}
+      {/* Modern Table & Mobile Cards Layout */}
       <Card className="border-white/10 bg-background/50 backdrop-blur-md shadow-xl overflow-hidden rounded-xl">
         {loading ? (
           <div className="p-12 pl-12 flex justify-center items-center h-64 text-muted-foreground">
@@ -509,87 +509,146 @@ export default function OrdersHistory() {
              جاري تحميل السجل...
           </div>
         ) : (
-          <div className="overflow-x-auto custom-scrollbar">
-            <table className="w-full text-sm text-right">
-              <thead className="bg-primary/5 border-b border-white/10 text-muted-foreground">
-                <tr>
-                  <th className="px-6 py-4 font-semibold whitespace-nowrap">رقم الطلب</th>
-                  <th className="px-6 py-4 font-semibold whitespace-nowrap">التاريخ والوقت</th>
-                  <th className="px-6 py-4 font-semibold whitespace-nowrap">النوع</th>
-                  <th className="px-6 py-4 font-semibold whitespace-nowrap">الحالة</th>
-                  <th className="px-6 py-4 font-semibold whitespace-nowrap">الإجمالي</th>
-                  <th className="px-6 py-4 font-semibold whitespace-nowrap text-center">الإجراءات</th>
-                </tr>
-              </thead>
-              <tbody>
-                <AnimatePresence>
-                  {filteredOrders.length > 0 ? filteredOrders.map((order, idx) => {
-                    const status = statusConfig[order.status as keyof typeof statusConfig] || statusConfig.pending;
-                    const StatusIcon = status.icon;
-                    const typeInfo = typeConfig[(order.type || order.order_type) as keyof typeof typeConfig] || typeConfig.dine_in;
-                    const TypeIcon = typeInfo.icon;
-                    const total = order.total || order.total_amount || 0;
+          <>
+            {/* Mobile Cards View (< md) */}
+            <div className="md:hidden divide-y divide-white/5">
+              {filteredOrders.length > 0 ? (
+                filteredOrders.map((order) => {
+                  const status = statusConfig[order.status as keyof typeof statusConfig] || statusConfig.pending;
+                  const StatusIcon = status.icon;
+                  const typeInfo = typeConfig[(order.type || order.order_type) as keyof typeof typeConfig] || typeConfig.dine_in;
+                  const TypeIcon = typeInfo.icon;
+                  const total = order.total || order.total_amount || 0;
 
-                    return (
-                      <motion.tr 
-                        key={order.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.02 }}
-                        className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap font-bold">
-                          #{order.order_number || order.orderNumber || order.id.slice(0, 6)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-muted-foreground flex items-center gap-2">
-                          <Calendar className="w-4 h-4" />
-                          {formatDate(order.created_at || order.createdAt)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-1.5 text-muted-foreground">
-                            <TypeIcon className="w-4 h-4" />
-                            {typeInfo.label}
+                  return (
+                    <div key={order.id} className="p-4 space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-bold text-base text-foreground">
+                            #{order.order_number || order.orderNumber || order.id.slice(0, 6)}
+                          </p>
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                            <TypeIcon className="w-3.5 h-3.5" />
+                            <span>{typeInfo.label}</span>
+                            <span>•</span>
+                            <span>{formatDate(order.created_at || order.createdAt)}</span>
                           </div>
+                        </div>
+                        <Badge variant="outline" className={cn("gap-1 py-0.5 rounded-full text-xs", status.color)}>
+                          <StatusIcon className="w-3 h-3" />
+                          {status.label}
+                        </Badge>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1">
+                        <div>
+                          <span className="text-xs text-muted-foreground">الإجمالي: </span>
+                          <span className="font-bold text-base text-emerald-500">{currency(total)}</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 gap-1 text-xs bg-white/5 hover:bg-primary/20 hover:text-primary rounded-lg px-3"
+                          onClick={() => handleViewOrder(order)}
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>عرض الفاتورة</span>
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="px-6 py-12 text-center text-muted-foreground">
+                  <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                  <span className="block text-base">لم يتم العثور على أية طلبات مطابقة</span>
+                </div>
+              )}
+            </div>
+
+            {/* Desktop Table View (>= md) */}
+            <div className="hidden md:block overflow-x-auto custom-scrollbar">
+              <table className="w-full text-sm text-right">
+                <thead className="bg-primary/5 border-b border-white/10 text-muted-foreground">
+                  <tr>
+                    <th className="px-6 py-4 font-semibold whitespace-nowrap">رقم الطلب</th>
+                    <th className="px-6 py-4 font-semibold whitespace-nowrap">التاريخ والوقت</th>
+                    <th className="px-6 py-4 font-semibold whitespace-nowrap">النوع</th>
+                    <th className="px-6 py-4 font-semibold whitespace-nowrap">الحالة</th>
+                    <th className="px-6 py-4 font-semibold whitespace-nowrap">الإجمالي</th>
+                    <th className="px-6 py-4 font-semibold whitespace-nowrap text-center">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <AnimatePresence>
+                    {filteredOrders.length > 0 ? filteredOrders.map((order, idx) => {
+                      const status = statusConfig[order.status as keyof typeof statusConfig] || statusConfig.pending;
+                      const StatusIcon = status.icon;
+                      const typeInfo = typeConfig[(order.type || order.order_type) as keyof typeof typeConfig] || typeConfig.dine_in;
+                      const TypeIcon = typeInfo.icon;
+                      const total = order.total || order.total_amount || 0;
+
+                      return (
+                        <motion.tr 
+                          key={order.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: idx * 0.02 }}
+                          className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap font-bold">
+                            #{order.order_number || order.orderNumber || order.id.slice(0, 6)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-muted-foreground flex items-center gap-2">
+                            <Calendar className="w-4 h-4" />
+                            {formatDate(order.created_at || order.createdAt)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5 text-muted-foreground">
+                              <TypeIcon className="w-4 h-4" />
+                              {typeInfo.label}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <Badge variant="outline" className={cn("gap-1 py-1 rounded-full", status.color)}>
+                              <StatusIcon className="w-3 h-3" />
+                              {status.label}
+                            </Badge>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap font-bold text-emerald-500">
+                            {currency(total)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 w-8 p-0 rounded-full hover:bg-primary/20 hover:text-primary transition-colors"
+                              onClick={() => handleViewOrder(order)}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          </td>
+                        </motion.tr>
+                      );
+                    }) : (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
+                          <AlertCircle className="w-12 h-12 md:w-16 md:h-16 mx-auto mb-4 opacity-20" />
+                          <span className="block text-lg">لم يتم العثور على أية طلبات مطابقة</span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Badge variant="outline" className={cn("gap-1 py-1 rounded-full", status.color)}>
-                            <StatusIcon className="w-3 h-3" />
-                            {status.label}
-                          </Badge>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap font-bold text-emerald-500">
-                          {currency(total)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-8 w-8 p-0 rounded-full hover:bg-primary/20 hover:text-primary transition-colors"
-                            onClick={() => handleViewOrder(order)}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </td>
-                      </motion.tr>
-                    );
-                  }) : (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
-                        <AlertCircle className="w-12 h-12 md:w-16 md:h-16 mx-auto mb-4 opacity-20" />
-                        <span className="block text-lg">لم يتم العثور على أية طلبات مطابقة</span>
-                      </td>
-                    </tr>
-                  )}
-                </AnimatePresence>
-              </tbody>
-            </table>
-          </div>
+                      </tr>
+                    )}
+                  </AnimatePresence>
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </Card>
 
       {/* Order Details Custom Dialog */}
       <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && setSelectedOrder(null)}>
-        <DialogContent className="sm:max-w-[500px] border-white/10 bg-background/95 backdrop-blur-xl">
+        <DialogContent className="sm:max-w-[500px] max-h-[90dvh] overflow-y-auto border-white/10 bg-background/95 backdrop-blur-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
               <span className="text-xl">

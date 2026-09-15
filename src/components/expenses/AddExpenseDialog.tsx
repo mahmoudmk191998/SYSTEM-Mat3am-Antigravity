@@ -168,7 +168,7 @@ export function AddExpenseDialog({ open, onOpenChange, onSuccess, onOpenPayroll 
         onOpenChange(val);
       }}
     >
-      <DialogContent className="sm:max-w-[460px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[460px] max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {categoryValue === 'رواتب' ? 'صرف رواتب ومصروفات الموظفين' : 'إضافة مصروف جديد'}
@@ -307,7 +307,7 @@ export function AddExpenseDialog({ open, onOpenChange, onSuccess, onOpenPayroll 
               </div>
 
               {/* Payment Method & Reference */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label className="text-[11px]">طريقة الدفع</Label>
                   <Select

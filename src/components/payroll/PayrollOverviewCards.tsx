@@ -9,7 +9,7 @@ interface PayrollOverviewCardsProps {
 
 export const PayrollOverviewCards: React.FC<PayrollOverviewCardsProps> = ({ kpis }) => {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
       {/* 1. Total Payroll */}
       <Card className="bg-slate-900/50 border-slate-800">
         <CardContent className="p-3.5">

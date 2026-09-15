@@ -134,7 +134,7 @@ export default function Delivery() {
         </div>
       }
     >
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <Card className="border-none shadow bg-gradient-to-br from-card to-card/50">
            <CardContent className="p-4 md:p-5">
              <div className="flex items-center gap-4">
@@ -442,7 +442,7 @@ export default function Delivery() {
 
       {/* ADD DRIVER MODAL */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="rounded-xl border-none shadow-xl">
+        <DialogContent className="rounded-xl border-none shadow-xl max-w-[95vw] sm:max-w-md max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl">إضافة سائق جديد</DialogTitle>
           </DialogHeader>
@@ -506,7 +506,7 @@ export default function Delivery() {
       
       {/* EDIT DRIVER MODAL */}
       <Dialog open={!!editingDriver} onOpenChange={(open) => !open && setEditingDriver(null)}>
-        <DialogContent className="rounded-xl border-none shadow-xl">
+        <DialogContent className="rounded-xl border-none shadow-xl max-w-[95vw] sm:max-w-md max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl">تعديل بيانات السائق</DialogTitle>
           </DialogHeader>
@@ -565,7 +565,7 @@ export default function Delivery() {
       
       {/* ASSIGN DRIVER MODAL */}
       <Dialog open={assignDriverOpen} onOpenChange={setAssignDriverOpen}>
-        <DialogContent className="rounded-xl border-none shadow-xl sm:max-w-md">
+        <DialogContent className="rounded-xl border-none shadow-xl max-w-[95vw] sm:max-w-md max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
              <DialogTitle className="text-xl flex items-center justify-center gap-2">
                 <User className="w-5 h-5 text-primary" />
@@ -622,11 +622,11 @@ export default function Delivery() {
 
       {/* ZONES MODALS */}
       <Dialog open={isAddZoneOpen} onOpenChange={setIsAddZoneOpen}>
-        <DialogContent className="rounded-xl border-none shadow-xl">
+        <DialogContent className="rounded-xl border-none shadow-xl max-w-[95vw] sm:max-w-md max-h-[90dvh] overflow-y-auto">
           <DialogHeader><DialogTitle className="text-xl">إضافة منطقة جديدة</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2"><label className="text-sm font-medium">اسم المنطقة</label><Input className="h-11" value={newZone.name} onChange={e => setNewZone({...newZone, name: e.target.value})} placeholder="مثال: وسط البلد" /></div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><label className="text-sm font-medium">رسوم التوصيل</label><Input className="h-11" type="number" value={newZone.fee} onChange={e => setNewZone({...newZone, fee: Number(e.target.value)})} /></div>
               <div className="space-y-2"><label className="text-sm font-medium">الحد الأدنى للطلب</label><Input className="h-11" type="number" value={newZone.minOrder} onChange={e => setNewZone({...newZone, minOrder: Number(e.target.value)})} /></div>
             </div>
@@ -640,12 +640,12 @@ export default function Delivery() {
       </Dialog>
 
       <Dialog open={!!editingZone} onOpenChange={(o) => !o && setEditingZone(null)}>
-        <DialogContent className="rounded-xl border-none shadow-xl">
+        <DialogContent className="rounded-xl border-none shadow-xl max-w-[95vw] sm:max-w-md max-h-[90dvh] overflow-y-auto">
           <DialogHeader><DialogTitle className="text-xl">تعديل المنطقة</DialogTitle></DialogHeader>
           {editingZone && (
              <div className="space-y-4 py-4">
              <div className="space-y-2"><label className="text-sm font-medium">اسم المنطقة</label><Input className="h-11" value={editingZone.name} onChange={e => setEditingZone({...editingZone, name: e.target.value})} /></div>
-             <div className="grid grid-cols-2 gap-4">
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                <div className="space-y-2"><label className="text-sm font-medium">رسوم التوصيل</label><Input className="h-11" type="number" value={editingZone.fee} onChange={e => setEditingZone({...editingZone, fee: Number(e.target.value)})} /></div>
                <div className="space-y-2"><label className="text-sm font-medium">الحد الأدنى للطلب</label><Input className="h-11" type="number" value={editingZone.minOrder} onChange={e => setEditingZone({...editingZone, minOrder: Number(e.target.value)})} /></div>
              </div>

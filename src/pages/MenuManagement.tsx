@@ -724,7 +724,7 @@ export default function MenuManagement() {
       <Dialog open={showAddItem || !!showEditItem} onOpenChange={(open) => {
          if (!open) { setShowAddItem(false); setShowEditItem(null); setItemTab("basic"); }
       }}>
-        <DialogContent className="max-w-2xl p-0 overflow-hidden bg-muted/10">
+        <DialogContent className="max-w-[95vw] md:max-w-2xl p-0 overflow-hidden bg-muted/10 max-h-[90dvh]">
           <form onSubmit={showEditItem ? handleUpdateItem : handleAddItem} className="flex flex-col h-[85vh] sm:h-[75vh]">
              {/* Header */}
              <div className="px-6 py-4 bg-background border-b flex items-center gap-3">
@@ -764,7 +764,7 @@ export default function MenuManagement() {
                          </div>
                       </div>
                       <div className="space-y-2">
-                         <Label>فئة العرض في המنيو <span className="text-destructive">*</span></Label>
+                         <Label>فئة العرض في المنيو <span className="text-destructive">*</span></Label>
                          <Select value={showEditItem ? (showEditItem.category_id || '') : itemForm.category_id} onValueChange={v => showEditItem ? setShowEditItem((s:any)=>({...s, category_id: v})) : setItemForm(f=>({...f, category_id: v}))} required>
                            <SelectTrigger className="h-12 bg-muted/30 focus:ring-primary shadow-sm">
                              <SelectValue placeholder="-- اختر الفئة التي سيندرج تحتها الصنف --" />
@@ -782,7 +782,7 @@ export default function MenuManagement() {
                    </TabsContent>
 
                    <TabsContent value="prices" className="m-0 space-y-6">
-                      <div className="bg-primary/5 p-5 border border-primary/20 rounded-xl grid grid-cols-2 gap-6">
+                      <div className="bg-primary/5 p-5 border border-primary/20 rounded-xl grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                          <div className="space-y-2">
                             <Label className="text-primary font-bold text-lg">سعر البيع النهائي <span className="text-destructive">*</span></Label>
                             <div className="relative">
@@ -798,7 +798,7 @@ export default function MenuManagement() {
                          </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-6 border-t pt-6">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 border-t pt-6">
                          <div className="space-y-3">
                             <Label className="flex items-center gap-2"><Clock className="w-4 h-4 text-primary"/> وقت التحضير (Standard)</Label>
                             <div className="flex items-center gap-3">
@@ -905,7 +905,7 @@ export default function MenuManagement() {
       <Dialog open={showAddCategory || !!showEditCategory} onOpenChange={(open) => {
          if (!open) { setShowAddCategory(false); setShowEditCategory(null); }
       }}>
-         <DialogContent className="sm:max-w-[425px]">
+         <DialogContent className="max-w-[95vw] sm:max-w-[425px] max-h-[90dvh] overflow-y-auto">
             <form onSubmit={showEditCategory ? handleUpdateCategory : handleAddCategory}>
                <DialogHeader className="border-b pb-4 mb-4">
                   <DialogTitle className="text-xl">{showEditCategory ? 'تحديث فئة قائمة' : 'بناء فئة جديدة للمنيو'}</DialogTitle>
@@ -959,14 +959,14 @@ export default function MenuManagement() {
       <Dialog open={showAddRecipe || !!showEditRecipe} onOpenChange={(open) => {
          if (!open) { setShowAddRecipe(false); setShowEditRecipe(null); }
       }}>
-         <DialogContent className="sm:max-w-[700px] bg-amber-50/50">
+         <DialogContent className="max-w-[95vw] sm:max-w-[700px] bg-amber-50/50 max-h-[90dvh] overflow-y-auto">
             <form onSubmit={showEditRecipe ? handleUpdateRecipe : handleAddRecipe}>
                <DialogHeader className="border-b pb-4 mb-4">
                   <DialogTitle className="text-xl flex items-center gap-2 text-amber-800"><ChefHat className="w-5 h-5"/> {showEditRecipe ? 'تعديل مقادير الوصفة' : 'صياغة وصفة جديدة'}</DialogTitle>
                </DialogHeader>
                
                <div className="space-y-6 -mt-2">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                      <div className="space-y-2">
                         <Label>اسم الوصفة <span className="text-destructive">*</span></Label>
                         <Input required placeholder="مثال: خلطة برجر الدجاج" value={showEditRecipe ? showEditRecipe.name : recipeForm.name} onChange={e => showEditRecipe ? setShowEditRecipe({...showEditRecipe, name: e.target.value}) : setRecipeForm({...recipeForm, name: e.target.value})} className="h-11 font-bold text-lg" />

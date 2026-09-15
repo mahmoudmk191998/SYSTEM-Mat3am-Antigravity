@@ -418,7 +418,7 @@ export default function Purchasing() {
     >
       <div className="grid gap-6">
         {/* KPIs Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <Card className="border-t-4 border-t-green-500 shadow-sm hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">إجمالي المشتريات (مستلم)</CardTitle>
@@ -585,7 +585,7 @@ export default function Purchasing() {
 
       {/* Add Purchase Order Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={(open) => { if (!open) resetForm(); setIsAddDialogOpen(open); }}>
-        <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto w-11/12 rounded-xl">
+        <DialogContent className="max-w-[95vw] md:max-w-5xl max-h-[90dvh] overflow-y-auto w-full rounded-xl">
           <form onSubmit={handleSubmitOrder}>
             <DialogHeader className="border-b pb-4 mb-4">
               <DialogTitle className="text-2xl flex items-center gap-2">
@@ -829,7 +829,7 @@ export default function Purchasing() {
 
       {/* View/Edit Order Dialog */}
       <Dialog open={!!viewingOrder} onOpenChange={(open) => !open && setViewingOrder(null)}>
-        <DialogContent className="max-w-4xl rounded-xl max-h-[95vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] md:max-w-4xl rounded-xl max-h-[90dvh] overflow-y-auto">
           <DialogHeader className="border-b pb-4">
             <DialogTitle className="text-2xl flex items-center gap-2">
               <Eye className="w-6 h-6 text-primary" />
@@ -863,7 +863,7 @@ export default function Purchasing() {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4 text-center">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-center">
                     <div className="bg-background rounded-lg p-3 border">
                       <p className="text-xs text-muted-foreground mb-1">إجمالي الفاتورة</p>
                       <p className="text-xl font-black text-primary">{Number(viewingOrder.total_amount).toLocaleString('ar-EG', {minimumFractionDigits: 2})} ج.م</p>

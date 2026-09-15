@@ -261,7 +261,7 @@ export default function KitchenDisplay() {
       }
     >
       {/* Live KDS Stats Dashboard */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <div className="bg-background/40 backdrop-blur-xl border border-white/10 p-4 rounded-2xl flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center text-primary">
             <Activity className="w-6 h-6" />
