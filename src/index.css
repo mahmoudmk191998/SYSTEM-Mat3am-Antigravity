@@ -410,13 +410,18 @@
   padding-right: env(safe-area-inset-right, 0px);
 }
 
-/* Mobile-specific fixes */
+/* Mobile-specific fixes and native app enhancements */
 @media (max-width: 767px) {
   /* Prevent iOS Safari automatic zoom on form focus by enforcing 16px minimum */
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   select,
   textarea {
     font-size: 16px !important;
+  }
+
+  /* Eliminate gray tap highlight box across mobile */
+  * {
+    -webkit-tap-highlight-color: transparent;
   }
 
   .overflow-x-auto {
@@ -426,5 +431,19 @@
   /* Hide scrollbar on mobile tabs while preserving touch scrolling */
   .overflow-x-auto::-webkit-scrollbar {
     display: none;
+  }
+
+  /* Native touch-action optimization */
+  button, a, input, select {
+    touch-action: manipulation;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

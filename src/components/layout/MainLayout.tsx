@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { useProfile } from '@/hooks/useProfile';
 import { Sidebar, SidebarContent } from './Sidebar';
+import { MobileBottomNav } from './MobileBottomNav';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { User, Wifi, WifiOff, LogOut, Moon, Sun, Lock, Clock, CalendarDays, Download, Menu, Eye, EyeOff } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from '@/components/ui/sheet';
@@ -134,8 +135,8 @@ export function MainLayout({ children, title, subtitle, actions }: MainLayoutPro
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }}
         className={cn(
-          "min-h-[100dvh] pt-2 md:pt-4 px-2 md:px-6 w-full max-w-[1800px] mx-auto relative transition-all duration-300",
-          bottomNavVisible ? "pb-28" : "pb-12"
+          "min-h-[100dvh] pt-2 md:pt-4 px-2 md:px-6 w-full max-w-[1800px] mx-auto relative transition-all duration-300 pb-24",
+          bottomNavVisible ? "md:pb-28" : "md:pb-12"
         )}
       >
         {/* Top Header */}
@@ -311,12 +312,15 @@ export function MainLayout({ children, title, subtitle, actions }: MainLayoutPro
           )}
         </header>
 
-        <div className="p-2 sm:p-4 md:p-6 pb-24 md:pb-12">
+        <div className="p-2 sm:p-4 md:p-6 pb-6 md:pb-12">
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
             {children}
           </motion.div>
         </div>
       </motion.main>
+
+      {/* Native Mobile Bottom Navigation Dock */}
+      <MobileBottomNav />
     </div>
   );
 }
