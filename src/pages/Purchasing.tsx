@@ -115,9 +115,14 @@ export default function Purchasing() {
     e.preventDefault();
     if (!supplierId || orderItems.length === 0) return;
 
-    if (orderItems.some(i => !i.itemId || !i.unitId || Number(i.quantity) <= 0)) {
-        alert("يرجى التأكد من اختيار جميع الأصناف، وحدات القياس والكميات بشكل صحيح.");
+    if (orderItems.some(i => !i.itemId || !i.unitId || Number(i.quantity) <= 0 || Number(i.unit_price) < 0 || isNaN(Number(i.quantity)) || isNaN(Number(i.unit_price)))) {
+        alert("يرجى التأكد من اختيار جميع الأصناف، وحدات القياس والكميات والأسعار بشكل صحيح وغير سالب.");
         return;
+    }
+
+    if (totalAmount <= 0) {
+      alert("إجمالي أمر الشراء يجب أن يكون أكبر من الصفر.");
+      return;
     }
 
     if (isDeferred && !dueDate) {
@@ -125,8 +130,8 @@ export default function Purchasing() {
       return;
     }
 
-    if (isDeferred && Number(paidAmount) > totalAmount) {
-      alert("المبلغ المدفوع لا يمكن أن يكون أكبر من إجمالي الفاتورة.");
+    if (isDeferred && (Number(paidAmount) < 0 || isNaN(Number(paidAmount)) || Number(paidAmount) > totalAmount)) {
+      alert("المبلغ المدفوع غير صالح أو أكبر من إجمالي الفاتورة.");
       return;
     }
 

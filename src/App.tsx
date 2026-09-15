@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { AzkarWidget } from "@/components/AzkarWidget";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -7,40 +8,43 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
-import { useUserPermissions, routePermissions } from "@/hooks/usePermissions";
+import { useUserPermissions } from "@/hooks/usePermissions";
 import { useTenantBranch } from "@/hooks/useDatabase";
-import Auth from "./pages/Auth";
-import Dashboard from "./pages/Dashboard";
-import POS from "./pages/POS";
-import KitchenDisplay from "./pages/KitchenDisplay";
-import OrdersHistory from "./pages/OrdersHistory";
-import TablesReservations from "./pages/TablesReservations";
-import MenuManagement from "./pages/MenuManagement";
-import Inventory from "./pages/Inventory";
-import Purchasing from "./pages/Purchasing";
-import Production from "./pages/Production";
-import Delivery from "./pages/Delivery";
-import Customers from "./pages/Customers";
-import Promotions from "./pages/Promotions";
-import HR from "./pages/HR";
-import Reports from "./pages/Reports";
-import Settings from "./pages/Settings";
-import AuditLog from "./pages/AuditLog";
-import Integrations from "./pages/Integrations";
-import Permissions from "./pages/Permissions";
-import Docs from "./pages/Docs";
-import DeveloperPlayground from "./pages/DeveloperPlayground";
-import NotFound from "./pages/NotFound";
-import Expenses from "./pages/Expenses";
-import Suppliers from "./pages/Suppliers";
-import WasteManagement from "./pages/WasteManagement";
-import Shifts from "./pages/Shifts";
-import Maintenance from "./pages/Maintenance";
-import Accounting from "./pages/Accounting";
-import CallCenter from "./pages/CallCenter";
-import AttendancePublic from "./pages/AttendancePublic";
 import { Shield } from "lucide-react";
 import { BrandLoader } from "@/components/common/BrandLoader";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary";
+
+// Lazy-loaded route components for optimal production bundle splitting
+const Auth = lazy(() => import("./pages/Auth"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const POS = lazy(() => import("./pages/POS"));
+const KitchenDisplay = lazy(() => import("./pages/KitchenDisplay"));
+const OrdersHistory = lazy(() => import("./pages/OrdersHistory"));
+const TablesReservations = lazy(() => import("./pages/TablesReservations"));
+const MenuManagement = lazy(() => import("./pages/MenuManagement"));
+const Inventory = lazy(() => import("./pages/Inventory"));
+const Purchasing = lazy(() => import("./pages/Purchasing"));
+const Production = lazy(() => import("./pages/Production"));
+const Delivery = lazy(() => import("./pages/Delivery"));
+const Customers = lazy(() => import("./pages/Customers"));
+const Promotions = lazy(() => import("./pages/Promotions"));
+const HR = lazy(() => import("./pages/HR"));
+const Reports = lazy(() => import("./pages/Reports"));
+const Settings = lazy(() => import("./pages/Settings"));
+const AuditLog = lazy(() => import("./pages/AuditLog"));
+const Integrations = lazy(() => import("./pages/Integrations"));
+const Permissions = lazy(() => import("./pages/Permissions"));
+const Docs = lazy(() => import("./pages/Docs"));
+const DeveloperPlayground = lazy(() => import("./pages/DeveloperPlayground"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const Expenses = lazy(() => import("./pages/Expenses"));
+const Suppliers = lazy(() => import("./pages/Suppliers"));
+const WasteManagement = lazy(() => import("./pages/WasteManagement"));
+const Shifts = lazy(() => import("./pages/Shifts"));
+const Maintenance = lazy(() => import("./pages/Maintenance"));
+const Accounting = lazy(() => import("./pages/Accounting"));
+const CallCenter = lazy(() => import("./pages/CallCenter"));
+const AttendancePublic = lazy(() => import("./pages/AttendancePublic"));
 
 const queryClient = new QueryClient();
 
@@ -98,58 +102,62 @@ function AppRoutes() {
   }
 
   return (
-    <Routes>
-      <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
-      <Route path="/attendance" element={<AttendancePublic />} />
-      <Route path="/" element={<ProtectedRoute requiredPerms={['dashboard.view']}><Dashboard /></ProtectedRoute>} />
-      <Route path="/pos" element={<ProtectedRoute requiredPerms={['pos.view']}><POS /></ProtectedRoute>} />
-      <Route path="/orders-history" element={<ProtectedRoute requiredPerms={['pos.view']}><OrdersHistory /></ProtectedRoute>} />
-      <Route path="/kitchen" element={<ProtectedRoute requiredPerms={['kitchen.view']}><KitchenDisplay /></ProtectedRoute>} />
-      <Route path="/tables" element={<ProtectedRoute requiredPerms={['tables.view']}><TablesReservations /></ProtectedRoute>} />
-      <Route path="/menu" element={<ProtectedRoute requiredPerms={['menu.view']}><MenuManagement /></ProtectedRoute>} />
-      <Route path="/inventory" element={<ProtectedRoute requiredPerms={['inventory.view']}><Inventory /></ProtectedRoute>} />
-      <Route path="/purchasing" element={<ProtectedRoute requiredPerms={['purchasing.view']}><Purchasing /></ProtectedRoute>} />
-      <Route path="/production" element={<ProtectedRoute requiredPerms={['production.view']}><Production /></ProtectedRoute>} />
-      <Route path="/delivery" element={<ProtectedRoute requiredPerms={['delivery.view']}><Delivery /></ProtectedRoute>} />
-      <Route path="/customers" element={<ProtectedRoute requiredPerms={['customers.view']}><Customers /></ProtectedRoute>} />
-      <Route path="/promotions" element={<ProtectedRoute requiredPerms={['promotions.view']}><Promotions /></ProtectedRoute>} />
-      <Route path="/hr" element={<ProtectedRoute requiredPerms={['hr.view_employees']}><HR /></ProtectedRoute>} />
-      <Route path="/reports" element={<ProtectedRoute requiredPerms={['reports.view']}><Reports /></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute requiredPerms={['settings.view']}><Settings /></ProtectedRoute>} />
-      <Route path="/audit" element={<ProtectedRoute requiredPerms={['audit.view']}><AuditLog /></ProtectedRoute>} />
-      <Route path="/integrations" element={<ProtectedRoute requiredPerms={['integrations.view']}><Integrations /></ProtectedRoute>} />
-      <Route path="/developer/playground" element={<ProtectedRoute requiredPerms={['integrations.view']}><DeveloperPlayground /></ProtectedRoute>} />
-      <Route path="/playground" element={<ProtectedRoute requiredPerms={['integrations.view']}><DeveloperPlayground /></ProtectedRoute>} />
-      <Route path="/permissions" element={<ProtectedRoute requiredPerms={['permissions.manage']}><Permissions /></ProtectedRoute>} />
-      <Route path="/docs" element={<ProtectedRoute requiredPerms={['dashboard.view']}><Docs /></ProtectedRoute>} />
-      <Route path="/expenses" element={<ProtectedRoute requiredPerms={['expenses.view']}><Expenses /></ProtectedRoute>} />
-      <Route path="/suppliers" element={<ProtectedRoute requiredPerms={['suppliers.view']}><Suppliers /></ProtectedRoute>} />
-      <Route path="/waste" element={<ProtectedRoute requiredPerms={['inventory.waste']}><WasteManagement /></ProtectedRoute>} />
-      <Route path="/shifts" element={<ProtectedRoute requiredPerms={['hr.manage_shifts']}><Shifts /></ProtectedRoute>} />
-      <Route path="/maintenance" element={<ProtectedRoute requiredPerms={['maintenance.view']}><Maintenance /></ProtectedRoute>} />
-      <Route path="/accounting" element={<ProtectedRoute requiredPerms={['accounting.view']}><Accounting /></ProtectedRoute>} />
-      <Route path="/callcenter" element={<ProtectedRoute requiredPerms={['callcenter.view']}><CallCenter /></ProtectedRoute>} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+    <Suspense fallback={<BrandLoader message="جاري فتح وتجهيز الصفحة..." />}>
+      <Routes>
+        <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
+        <Route path="/attendance" element={<AttendancePublic />} />
+        <Route path="/" element={<ProtectedRoute requiredPerms={['dashboard.view']}><Dashboard /></ProtectedRoute>} />
+        <Route path="/pos" element={<ProtectedRoute requiredPerms={['pos.view']}><POS /></ProtectedRoute>} />
+        <Route path="/orders-history" element={<ProtectedRoute requiredPerms={['pos.view']}><OrdersHistory /></ProtectedRoute>} />
+        <Route path="/kitchen" element={<ProtectedRoute requiredPerms={['kitchen.view']}><KitchenDisplay /></ProtectedRoute>} />
+        <Route path="/tables" element={<ProtectedRoute requiredPerms={['tables.view']}><TablesReservations /></ProtectedRoute>} />
+        <Route path="/menu" element={<ProtectedRoute requiredPerms={['menu.view']}><MenuManagement /></ProtectedRoute>} />
+        <Route path="/inventory" element={<ProtectedRoute requiredPerms={['inventory.view']}><Inventory /></ProtectedRoute>} />
+        <Route path="/purchasing" element={<ProtectedRoute requiredPerms={['purchasing.view']}><Purchasing /></ProtectedRoute>} />
+        <Route path="/production" element={<ProtectedRoute requiredPerms={['production.view']}><Production /></ProtectedRoute>} />
+        <Route path="/delivery" element={<ProtectedRoute requiredPerms={['delivery.view']}><Delivery /></ProtectedRoute>} />
+        <Route path="/customers" element={<ProtectedRoute requiredPerms={['customers.view']}><Customers /></ProtectedRoute>} />
+        <Route path="/promotions" element={<ProtectedRoute requiredPerms={['promotions.view']}><Promotions /></ProtectedRoute>} />
+        <Route path="/hr" element={<ProtectedRoute requiredPerms={['hr.view_employees']}><HR /></ProtectedRoute>} />
+        <Route path="/reports" element={<ProtectedRoute requiredPerms={['reports.view']}><Reports /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute requiredPerms={['settings.view']}><Settings /></ProtectedRoute>} />
+        <Route path="/audit" element={<ProtectedRoute requiredPerms={['audit.view']}><AuditLog /></ProtectedRoute>} />
+        <Route path="/integrations" element={<ProtectedRoute requiredPerms={['integrations.view']}><Integrations /></ProtectedRoute>} />
+        <Route path="/developer/playground" element={<ProtectedRoute requiredPerms={['integrations.view']}><DeveloperPlayground /></ProtectedRoute>} />
+        <Route path="/playground" element={<ProtectedRoute requiredPerms={['integrations.view']}><DeveloperPlayground /></ProtectedRoute>} />
+        <Route path="/permissions" element={<ProtectedRoute requiredPerms={['permissions.manage']}><Permissions /></ProtectedRoute>} />
+        <Route path="/docs" element={<ProtectedRoute requiredPerms={['dashboard.view']}><Docs /></ProtectedRoute>} />
+        <Route path="/expenses" element={<ProtectedRoute requiredPerms={['expenses.view']}><Expenses /></ProtectedRoute>} />
+        <Route path="/suppliers" element={<ProtectedRoute requiredPerms={['suppliers.view']}><Suppliers /></ProtectedRoute>} />
+        <Route path="/waste" element={<ProtectedRoute requiredPerms={['inventory.waste']}><WasteManagement /></ProtectedRoute>} />
+        <Route path="/shifts" element={<ProtectedRoute requiredPerms={['hr.manage_shifts']}><Shifts /></ProtectedRoute>} />
+        <Route path="/maintenance" element={<ProtectedRoute requiredPerms={['maintenance.view']}><Maintenance /></ProtectedRoute>} />
+        <Route path="/accounting" element={<ProtectedRoute requiredPerms={['accounting.view']}><Accounting /></ProtectedRoute>} />
+        <Route path="/callcenter" element={<ProtectedRoute requiredPerms={['callcenter.view']}><CallCenter /></ProtectedRoute>} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </Suspense>
   );
 }
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <PWAInstallPrompt />
-        <AzkarWidget />
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <AuthProvider>
-            <AppRoutes />
-          </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <PWAInstallPrompt />
+          <AzkarWidget />
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <AuthProvider>
+              <AppRoutes />
+            </AuthProvider>
+          </BrowserRouter>
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

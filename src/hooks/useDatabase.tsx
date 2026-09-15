@@ -11,10 +11,15 @@ const fetchCollection = async (
   tenantId: string | null, 
   fieldObj: string = 'tenant_id', 
   orderByField?: string,
-  orderByDir: 'asc' | 'desc' = 'asc'
+  orderByDir: 'asc' | 'desc' = 'asc',
+  maxLimit?: number
 ) => {
   if (!tenantId) return [];
-  const q = query(collection(db, colPath), where(fieldObj, '==', tenantId));
+  const constraints: any[] = [where(fieldObj, '==', tenantId)];
+  if (maxLimit && maxLimit > 0) {
+    constraints.push(fsLimit(maxLimit));
+  }
+  const q = query(collection(db, colPath), ...constraints);
   const snap = await getDocs(q);
   const data = snap.docs.map(d => ({ id: d.id, ...d.data() as any }));
   
@@ -1926,7 +1931,7 @@ export function useAuditLog(tenantId: string | null) {
       return;
     }
     try {
-      const logs = await fetchCollection('audit_logs', tenantId, 'tenant_id', 'created_at', 'desc');
+      const logs = await fetchCollection('audit_logs', tenantId, 'tenant_id', 'created_at', 'desc', 300);
       setAuditLogs(logs);
     } catch (e: any) {
       toast.error('خطأ في جلب سجل التدقيق');

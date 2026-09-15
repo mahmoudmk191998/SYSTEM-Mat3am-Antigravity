@@ -99,8 +99,9 @@ service cloud.firestore {
     // Deletion is STRICTLY RESTRICTED to authenticated managers only.
     match /attendance/{attendanceId} {
       allow read: if true;
-      allow create: if true;
-      allow update: if true;
+      allow create: if request.resource.data.keys().hasAll(['employee_id', 'tenant_id']);
+      allow update: if request.resource.data.employee_id == resource.data.employee_id
+                    && request.resource.data.tenant_id == resource.data.tenant_id;
       allow delete: if isAuthenticated();
     }
 
@@ -118,10 +119,10 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // Audit Logs (Authenticated read; creation allowed for audit trail; no deletion)
+    // Audit Logs (Authenticated read and creation; updates and deletions strictly forbidden)
     match /audit_logs/{logId} {
       allow read: if isAuthenticated();
-      allow create: if true;
+      allow create: if isAuthenticated();
       allow update, delete: if false;
     }
 

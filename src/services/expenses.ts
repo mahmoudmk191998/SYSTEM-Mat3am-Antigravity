@@ -35,10 +35,18 @@ export const getExpenses = async (tenantId?: string, branchId?: string, startDat
 };
 
 export const addExpense = async (expenseData: Omit<Expense, 'id' | 'createdAt'>) => {
+  const numAmount = Number(expenseData.amount);
+  if (!Number.isFinite(numAmount) || numAmount <= 0) {
+    throw new Error('مبلغ المصروف يجب أن يكون رقماً موجباً أكبر من الصفر');
+  }
+  if (!expenseData.tenantId || typeof expenseData.tenantId !== 'string' || !expenseData.tenantId.trim()) {
+    throw new Error('يجب تحديد معرف المنشأة (tenantId)');
+  }
   try {
     const expensesRef = collection(db, COLLECTION_NAME);
     const docRef = await addDoc(expensesRef, {
       ...expenseData,
+      amount: numAmount,
       createdAt: new Date().toISOString()
     });
     return docRef.id;
@@ -49,6 +57,13 @@ export const addExpense = async (expenseData: Omit<Expense, 'id' | 'createdAt'>)
 };
 
 export const updateExpense = async (id: string, updates: Partial<Expense>) => {
+  if (updates.amount !== undefined) {
+    const numAmount = Number(updates.amount);
+    if (!Number.isFinite(numAmount) || numAmount <= 0) {
+      throw new Error('مبلغ المصروف يجب أن يكون رقماً موجباً أكبر من الصفر');
+    }
+    updates.amount = numAmount;
+  }
   try {
     const docRef = doc(db, COLLECTION_NAME, id);
     await updateDoc(docRef, updates);
