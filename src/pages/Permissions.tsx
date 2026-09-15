@@ -32,6 +32,7 @@ import {
   isOwnerRole,
   isAdminOrOwnerRole,
 } from '@/lib/permissionsModel';
+import { notifySecurityRoleChanged } from '@/services/notifications.service';
 
 interface UserEntry {
   id: string;
@@ -305,6 +306,12 @@ export default function Permissions() {
         new_role: roleKey,
         created_at: new Date().toISOString(),
       });
+
+      notifySecurityRoleChanged(
+        user?.displayName || user?.email || 'المدير',
+        selectedUser.full_name || selectedUser.email,
+        template.label
+      ).catch(() => {});
 
       toast.success(`تم تعيين دور "${template.label}" وحفظ الصلاحيات بنجاح`);
       setSelectedUser((prev) => (prev ? { ...prev, role: roleKey, permissions: newPerms } : null));

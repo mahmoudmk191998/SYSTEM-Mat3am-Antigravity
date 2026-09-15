@@ -23,6 +23,7 @@ import type {
   AdvanceRepaymentType,
   PayrollKPIs,
 } from '@/types/payroll';
+import { notifySalaryPayment } from '@/services/notifications.service';
 import {
   calculateEmployeePayroll,
   calculateAdvanceDueInstallment,
@@ -310,6 +311,14 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
           created_at: nowIso,
         })
       );
+
+      // 8. Smart Notification (only for authorized payroll viewers)
+      notifySalaryPayment(
+        branchId || payroll.branch_id || 'all',
+        payroll.employeeName,
+        Number(amount),
+        paymentId
+      ).catch(() => {});
 
       toast.success(`تم صرف الراتب بنجاح: ${amount.toLocaleString('ar-EG')} ج.م للموظف ${payroll.employeeName}`);
       await fetchAllPayrollData();

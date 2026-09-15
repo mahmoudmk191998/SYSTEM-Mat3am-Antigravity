@@ -5,6 +5,7 @@ import { useAuth } from './useAuth';
 import { useAppStore } from '@/lib/store';
 import { toast } from 'sonner';
 import { hashPin } from '@/lib/attendanceSecurity';
+import { notifyLowStock, resolveLowStock } from '@/services/notifications.service';
 
 const fetchCollection = async (
   colPath: string, 
@@ -964,12 +965,31 @@ export function useStockMovements(branchId: string | null) {
       if (movement.item_id) {
         const stockQ = query(collection(db, 'branch_stock'), where('branch_id', '==', branchId), where('item_id', '==', movement.item_id));
         const exist = await getDocs(stockQ);
+        let finalQty = 0;
         if (!exist.empty) {
           const currentQty = exist.docs[0].data().quantity || 0;
-          const newQty = Math.max(Number(currentQty) + Number(movement.quantity), 0);
-          await updateDoc(doc(db, 'branch_stock', exist.docs[0].id), { quantity: newQty, last_count_date: new Date().toISOString() });
+          finalQty = Math.max(Number(currentQty) + Number(movement.quantity), 0);
+          await updateDoc(doc(db, 'branch_stock', exist.docs[0].id), { quantity: finalQty, last_count_date: new Date().toISOString() });
         } else {
-          await addDoc(collection(db, 'branch_stock'), { branch_id: branchId, item_id: movement.item_id, quantity: Math.max(movement.quantity, 0) });
+          finalQty = Math.max(Number(movement.quantity) || 0, 0);
+          await addDoc(collection(db, 'branch_stock'), { branch_id: branchId, item_id: movement.item_id, quantity: finalQty });
+        }
+
+        if (branchId && movement.item_id) {
+          try {
+            const itemDoc = await getDoc(doc(db, 'inventory_items', movement.item_id));
+            if (itemDoc.exists()) {
+              const itemData = itemDoc.data();
+              const minStock = Number(itemData?.min_stock_level || 0);
+              if (minStock > 0) {
+                if (finalQty <= minStock) {
+                  await notifyLowStock(branchId, { id: movement.item_id, name: itemData.name, min_stock_level: minStock }, finalQty);
+                } else {
+                  await resolveLowStock(branchId, movement.item_id);
+                }
+              }
+            }
+          } catch (_) {}
         }
       }
       toast.success('تمت إضافة الحركة');

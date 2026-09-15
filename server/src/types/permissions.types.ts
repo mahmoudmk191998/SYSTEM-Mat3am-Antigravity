@@ -12,6 +12,7 @@ export const API_PERMISSIONS = [
   'customers:read',
   'reservations:create',
   'reservations:read',
+  'attendance:manage',
 ] as const;
 
 export type ApiPermission = (typeof API_PERMISSIONS)[number];

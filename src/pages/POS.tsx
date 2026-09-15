@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, orderBy, addDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
+import { notifyNewOrder } from '@/services/notifications.service';
 
 type OrderType = 'dine_in' | 'takeaway' | 'delivery';
 
@@ -437,11 +438,7 @@ export default function POS() {
       
       // Automatically open the cash drawer for every successful sale
       kickDrawer();
-      addNotification({
-        title: 'طلب جديد',
-        message: `تم إنشاء طلب جديد برقم ${order.order_number}`,
-        type: 'success'
-      });
+      notifyNewOrder(branchId, order.id || `ord_${Date.now()}`, order.order_number, total);
     }
   };
 

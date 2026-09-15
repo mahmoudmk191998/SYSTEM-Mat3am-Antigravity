@@ -7,6 +7,7 @@ import {
   deleteAttendanceRecord,
 } from '../../controllers/attendance.controller.js';
 import { authenticateApiKey } from '../../middleware/auth.middleware.js';
+import { requirePermission } from '../../middleware/permission.middleware.js';
 import { validateRequest } from '../../middleware/validator.middleware.js';
 import {
   publicClockSchema,
@@ -23,10 +24,11 @@ attendanceRouter.post(
   recordPublicClock
 );
 
-// Authenticated Admin routes
+// Authenticated Admin routes - Enforced with strict RBAC requirePermission
 attendanceRouter.post(
   '/attendance/manual-correction',
   authenticateApiKey,
+  requirePermission('attendance:manage'),
   validateRequest({ body: manualAttendanceCorrectionSchema }),
   manualCorrectAttendance
 );
@@ -34,11 +36,13 @@ attendanceRouter.post(
 attendanceRouter.post(
   '/attendance/rotate-qr-token',
   authenticateApiKey,
+  requirePermission('attendance:manage'),
   rotateAttendanceToken
 );
 
 attendanceRouter.delete(
   '/attendance/:attendanceId',
   authenticateApiKey,
+  requirePermission('attendance:manage'),
   deleteAttendanceRecord
 );

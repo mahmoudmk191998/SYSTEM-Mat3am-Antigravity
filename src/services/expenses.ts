@@ -1,6 +1,7 @@
 import { db } from '@/lib/firebase';
 import { collection, doc, query, where, getDocs, addDoc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
 import type { Expense } from '@/types/expenses';
+import { notifyLargeExpense } from './notifications.service';
 
 const COLLECTION_NAME = 'expenses';
 
@@ -49,6 +50,16 @@ export const addExpense = async (expenseData: Omit<Expense, 'id' | 'createdAt'>)
       amount: numAmount,
       createdAt: new Date().toISOString()
     });
+
+    if (numAmount >= 5000) {
+      notifyLargeExpense(
+        expenseData.branchId || 'all',
+        expenseData.description || 'مصروف عام',
+        numAmount,
+        docRef.id
+      ).catch(() => {});
+    }
+
     return docRef.id;
   } catch (error) {
     console.error('Error adding expense:', error);

@@ -21,6 +21,7 @@ const ADMIN_ALL_PERMISSIONS: ApiPermission[] = [
   'customers:read',
   'reservations:create',
   'reservations:read',
+  'attendance:manage',
 ];
 
 export function createAuthMiddleware(clientService: ApiClientService = defaultApiClientService) {

@@ -4,13 +4,14 @@ import { useTenantBranch, useDashboardStats } from '@/hooks/useDatabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import {
-  DollarSign, ShoppingCart, TrendingUp, Clock, CheckCircle, AlertTriangle, CalendarDays, PlusCircle, CreditCard, Users, Store, Bike, ArrowUpRight
+  DollarSign, ShoppingCart, TrendingUp, Clock, CheckCircle, AlertTriangle, CalendarDays, PlusCircle, CreditCard, Users, Store, Bike, ArrowUpRight, ArrowLeft
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { motion } from 'framer-motion';
 import { KPICard } from '@/components/dashboard';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 import { useNavigate } from 'react-router-dom';
+import { useNotificationsStore } from '@/lib/notifications.store';
 
 export default function Dashboard() {
   const { currency, number } = useFormatters();
@@ -41,9 +42,48 @@ export default function Dashboard() {
   const currentDate = new Intl.DateTimeFormat('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).format(new Date());
 
   const COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444'];
+  const { activeAlerts } = useNotificationsStore();
 
   return (
     <MainLayout title="لوحة التحكم" subtitle="نظرة عامة على أداء ومؤشرات المطعم">
+      {/* Active High-Priority Alerts Banner */}
+      {activeAlerts && activeAlerts.length > 0 && (
+        <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 backdrop-blur-md shadow-sm">
+          <div className="flex items-center justify-between gap-4 mb-2.5">
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-black text-sm sm:text-base">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <span>تنبيهات تحتاج انتباهك ({activeAlerts.length})</span>
+            </div>
+            <button
+              onClick={() => navigate('/notifications')}
+              className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
+            >
+              عرض الكل
+              <ArrowLeft className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {activeAlerts.slice(0, 3).map((alert) => (
+              <div
+                key={alert.id}
+                onClick={() => alert.actionRoute && navigate(alert.actionRoute)}
+                className="p-3 rounded-xl bg-card/80 border border-border/40 hover:border-amber-500/50 transition-all cursor-pointer flex items-start gap-2.5 group shadow-xs"
+              >
+                <div className="mt-1 w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                <div className="flex-1 overflow-hidden">
+                  <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">
+                    {alert.title}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">
+                    {alert.message}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Premium Hero Section */}
       <div className="mb-8 relative overflow-hidden rounded-[36px] border border-white/10 bg-gradient-to-br from-card/80 to-background/40 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] group">
         {/* Ambient Animated Gradient Spotlight */}

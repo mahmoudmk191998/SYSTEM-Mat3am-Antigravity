@@ -45,6 +45,7 @@ const Maintenance = lazy(() => import("./pages/Maintenance"));
 const Accounting = lazy(() => import("./pages/Accounting"));
 const CallCenter = lazy(() => import("./pages/CallCenter"));
 const AttendancePublic = lazy(() => import("./pages/AttendancePublic"));
+const NotificationsHistory = lazy(() => import("./pages/NotificationsHistory"));
 
 const queryClient = new QueryClient();
 
@@ -154,6 +155,7 @@ function AppRoutes() {
         <Route path="/maintenance" element={<ProtectedRoute requiredPerms={['maintenance.view']}><Maintenance /></ProtectedRoute>} />
         <Route path="/accounting" element={<ProtectedRoute requiredPerms={['accounting.view']}><Accounting /></ProtectedRoute>} />
         <Route path="/callcenter" element={<ProtectedRoute requiredPerms={['callcenter.view']}><CallCenter /></ProtectedRoute>} />
+        <Route path="/notifications" element={<ProtectedRoute><NotificationsHistory /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>

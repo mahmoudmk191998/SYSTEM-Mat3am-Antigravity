@@ -249,6 +249,29 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
+    // =========================================================================
+    // Smart Notifications Center & Read State Security
+    // =========================================================================
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated() && (
+        request.auth.token.role == 'owner' || 
+        request.auth.token.role == 'admin' ||
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ['owner', 'admin']
+      );
+    }
+
+    match /notification_reads/{readId} {
+      // User can only view and manage their own read tracking
+      allow read, write: if isAuthenticated() && (
+        readId.matches('^' + request.auth.uid + '_.*') ||
+        (resource != null && resource.data.userId == request.auth.uid) ||
+        (request.resource != null && request.resource.data.userId == request.auth.uid)
+      );
+    }
+
     // Default catch-all: reject unauthenticated access to any unspecified document
     match /{document=**} {
       allow read, write: if isAuthenticated();
