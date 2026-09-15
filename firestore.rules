@@ -216,13 +216,32 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // User Roles & Profiles
+    // User Profiles (Users cannot change their own role or self-activate)
+    match /profiles/{profileId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        !('role' in request.resource.data) || request.resource.data.role == resource.data.role || request.auth.uid != profileId
+      ) && (
+        !('status' in request.resource.data) || request.resource.data.status == resource.data.status || request.auth.uid != profileId
+      );
+      allow delete: if isAuthenticated() && request.auth.uid != profileId;
+    }
+
+    // User Roles (Prevent self-granting / privilege escalation)
     match /user_roles/{roleId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.user_id != request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.user_id != request.auth.uid;
     }
+
+    // User Permissions (Prevent self-granting / privilege escalation)
     match /user_permissions/{permId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.user_id != request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.user_id != request.auth.uid;
     }
+
     match /users/{userId} {
       allow read, write: if isAuthenticated();
     }

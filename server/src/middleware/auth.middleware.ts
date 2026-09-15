@@ -154,3 +154,31 @@ export function createAuthMiddleware(clientService: ApiClientService = defaultAp
 }
 
 export const authenticateApiKey = createAuthMiddleware();
+
+/**
+ * Role-Based Access Control (RBAC) middleware.
+ * Asserts that the authenticated client/user has the required permission.
+ */
+export function requirePermission(permission: ApiPermission | string) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+    try {
+      if (!req.apiClient) {
+        throw new UnauthorizedError('Authentication required');
+      }
+
+      const clientPerms = req.apiClient.permissions || [];
+      const hasWildcard = clientPerms.includes('*' as any);
+      const hasDirectPerm = clientPerms.includes(permission as any);
+
+      if (!hasWildcard && !hasDirectPerm) {
+        throw new ForbiddenError(
+          `Permission denied: Missing required permission '${permission}'`
+        );
+      }
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}

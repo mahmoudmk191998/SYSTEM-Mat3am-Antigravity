@@ -50,7 +50,7 @@ const queryClient = new QueryClient();
 
 function ProtectedRoute({ children, requiredPerms }: { children: React.ReactNode; requiredPerms?: string[] }) {
   const { user, loading: authLoading } = useAuth();
-  const { hasAnyPermission, isAdmin, loading: permLoading, hasAnyRole } = useUserPermissions();
+  const { hasAnyPermission, isAdmin, loading: permLoading, hasAnyRole, isDisabled } = useUserPermissions();
 
   if (authLoading || permLoading) {
     return (
@@ -64,14 +64,29 @@ function ProtectedRoute({ children, requiredPerms }: { children: React.ReactNode
   }
   if (!user) return <Navigate to="/auth" replace />;
 
+  // Disabled user check
+  if (isDisabled) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4" dir="rtl">
+        <div className="text-center space-y-4 max-w-md bg-card p-6 sm:p-8 rounded-2xl border border-border shadow-xl">
+          <Shield className="w-16 h-16 mx-auto text-destructive/60" />
+          <h2 className="text-xl font-bold text-foreground">الحساب معطل</h2>
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            تم تعطيل هذا الحساب من قبل الإدارة. يرجى التواصل مع المسؤول أو المالك لإعادة تفعيل الحساب.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // User has no role at all - show access denied
   if (!hasAnyRole && !isAdmin) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="text-center space-y-4 max-w-md">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4" dir="rtl">
+        <div className="text-center space-y-4 max-w-md bg-card p-6 sm:p-8 rounded-2xl border border-border shadow-xl">
           <Shield className="w-16 h-16 mx-auto text-muted-foreground/30" />
           <h2 className="text-xl font-bold text-foreground">لا توجد صلاحيات</h2>
-          <p className="text-muted-foreground">حسابك لا يملك أي صلاحيات بعد. يرجى التواصل مع المدير لمنحك الصلاحيات المطلوبة.</p>
+          <p className="text-muted-foreground text-sm">حسابك لا يملك أي صلاحيات بعد. يرجى التواصل مع المدير لمنحك الصلاحيات المطلوبة.</p>
         </div>
       </div>
     );
@@ -80,11 +95,16 @@ function ProtectedRoute({ children, requiredPerms }: { children: React.ReactNode
   // Check specific permissions
   if (requiredPerms && !isAdmin && !hasAnyPermission(requiredPerms)) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="text-center space-y-4 max-w-md">
-          <Shield className="w-16 h-16 mx-auto text-muted-foreground/30" />
-          <h2 className="text-xl font-bold text-foreground">غير مصرح بالدخول</h2>
-          <p className="text-muted-foreground">ليس لديك صلاحية للوصول لهذه الصفحة.</p>
+      <div className="min-h-screen bg-background flex items-center justify-center p-4" dir="rtl">
+        <div className="text-center space-y-4 max-w-md bg-card p-6 sm:p-8 rounded-2xl border border-border shadow-xl">
+          <Shield className="w-16 h-16 mx-auto text-destructive/40" />
+          <h2 className="text-xl font-bold text-foreground">ليس لديك صلاحية للوصول إلى هذه الصفحة</h2>
+          <p className="text-muted-foreground text-sm">ليس لديك الصلاحيات الكافية لعرض هذه الصفحة أو تنفيذ الإجراءات داخلها.</p>
+          <div className="pt-2">
+            <a href="/" className="inline-flex items-center justify-center rounded-xl text-sm font-bold ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-5 py-2">
+              العودة للرئيسية
+            </a>
+          </div>
         </div>
       </div>
     );
