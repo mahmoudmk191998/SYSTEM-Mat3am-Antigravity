@@ -15,6 +15,7 @@ import { adminIntegrationsRouter } from './adminIntegrations.routes.js';
 import { adminObservabilityRouter } from './adminObservability.routes.js';
 import { developerPlaygroundRouter } from './developerPlayground.routes.js';
 import { attendanceRouter } from './attendance.routes.js';
+import { notificationsRouter } from './notifications.routes.js';
 import { sseRouter } from '../../realtime/sse/sse.routes.js';
 
 export const v1Router = Router();
@@ -38,4 +39,5 @@ v1Router.use('/', adminIntegrationsRouter);
 v1Router.use('/', adminObservabilityRouter);
 v1Router.use('/', developerPlaygroundRouter);
 v1Router.use('/', attendanceRouter);
+v1Router.use('/', notificationsRouter);
 v1Router.use('/', sseRouter);

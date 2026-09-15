@@ -8,6 +8,6 @@ export const settingsRouter = Router();
 settingsRouter.get(
   '/settings',
   authenticateApiKey,
-  requirePermission('menu:read'),
+  requirePermission('settings:read'),
   getSettings
 );

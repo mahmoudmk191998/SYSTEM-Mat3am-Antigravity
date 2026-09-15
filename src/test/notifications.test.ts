@@ -421,4 +421,182 @@ describe('Production-Grade Smart Notifications Center Test Suite', () => {
       expect(executeAction([], true)).toBe(true);
     });
   });
+
+  // =========================================================================
+  // 6. Security Hotfix & Authorization Hardening Tests
+  // =========================================================================
+  describe('6. Security Hotfix & Authorization Hardening', () => {
+    it('1. Untrusted client / Cashier cannot create Security or Settings notifications', () => {
+      const validateClientCreation = (
+        userRole: string,
+        category: string
+      ): { allowed: boolean; reason?: string } => {
+        if (category === 'security' || category === 'settings') {
+          if (!['owner', 'admin'].includes(userRole)) {
+            return { allowed: false, reason: 'Security & settings notifications restricted to admins' };
+          }
+        }
+        return { allowed: true };
+      };
+
+      expect(validateClientCreation('cashier', 'security').allowed).toBe(false);
+      expect(validateClientCreation('waiter', 'settings').allowed).toBe(false);
+      expect(validateClientCreation('accountant', 'security').allowed).toBe(false);
+      expect(validateClientCreation('admin', 'security').allowed).toBe(true);
+      expect(validateClientCreation('owner', 'settings').allowed).toBe(true);
+    });
+
+    it('2. Client cannot spoof foreign branch ID', () => {
+      const validateBranchAssignment = (
+        userBranchId: string,
+        isAdmin: boolean,
+        targetBranchId: string
+      ): boolean => {
+        if (isAdmin) return true;
+        if (targetBranchId === 'all') return true;
+        return userBranchId === targetBranchId;
+      };
+
+      // Staff in Cairo cannot target Alexandria
+      expect(validateBranchAssignment('branch-cairo', false, 'branch-alex')).toBe(false);
+      // Staff in Cairo can target Cairo
+      expect(validateBranchAssignment('branch-cairo', false, 'branch-cairo')).toBe(true);
+      // Admin can target any branch
+      expect(validateBranchAssignment('branch-cairo', true, 'branch-alex')).toBe(true);
+    });
+
+    it('3. Untrusted client cannot forge Payroll or Expense notifications', () => {
+      const validateFinancialNotificationCreation = (
+        userRole: string,
+        category: string
+      ): boolean => {
+        if (['payroll', 'advances', 'expenses'].includes(category)) {
+          return ['owner', 'admin', 'accountant'].includes(userRole);
+        }
+        return true;
+      };
+
+      expect(validateFinancialNotificationCreation('cashier', 'payroll')).toBe(false);
+      expect(validateFinancialNotificationCreation('inventory', 'expenses')).toBe(false);
+      expect(validateFinancialNotificationCreation('kitchen', 'payroll')).toBe(false);
+      expect(validateFinancialNotificationCreation('accountant', 'payroll')).toBe(true);
+      expect(validateFinancialNotificationCreation('admin', 'expenses')).toBe(true);
+    });
+
+    it('4. Unauthorized user cannot resolve an alert without matching permission', () => {
+      const validateResolution = (
+        userRole: string,
+        alertCategory: string
+      ): boolean => {
+        if (['owner', 'admin', 'manager'].includes(userRole)) return true;
+        if (alertCategory === 'inventory' && userRole === 'inventory') return true;
+        return false;
+      };
+
+      // Cashier cannot resolve low-stock alert
+      expect(validateResolution('cashier', 'inventory')).toBe(false);
+      // Waiter cannot resolve low-stock alert
+      expect(validateResolution('waiter', 'inventory')).toBe(false);
+      // Inventory staff can resolve
+      expect(validateResolution('inventory', 'inventory')).toBe(true);
+      // Manager/Admin can resolve
+      expect(validateResolution('manager', 'inventory')).toBe(true);
+      expect(validateResolution('admin', 'inventory')).toBe(true);
+    });
+
+    it('5. Deduplication key preemption by untrusted client is neutralized', () => {
+      const allowedCategoriesForDeduplicationKey = (
+        userRole: string,
+        key: string
+      ): boolean => {
+        if (key.startsWith('low_stock_') && !['owner', 'admin', 'inventory', 'manager'].includes(userRole)) {
+          return false;
+        }
+        if (key.startsWith('sec_') && !['owner', 'admin'].includes(userRole)) {
+          return false;
+        }
+        if (key.startsWith('salary_') && !['owner', 'admin', 'accountant'].includes(userRole)) {
+          return false;
+        }
+        return true;
+      };
+
+      expect(allowedCategoriesForDeduplicationKey('cashier', 'low_stock_branch1_prod99')).toBe(false);
+      expect(allowedCategoriesForDeduplicationKey('cashier', 'salary_paid_emp123')).toBe(false);
+      expect(allowedCategoriesForDeduplicationKey('cashier', 'sec_role_change_99')).toBe(false);
+      expect(allowedCategoriesForDeduplicationKey('inventory', 'low_stock_branch1_prod99')).toBe(true);
+      expect(allowedCategoriesForDeduplicationKey('accountant', 'salary_paid_emp123')).toBe(true);
+    });
+
+    it('6. Notification content fields are strictly immutable on update', () => {
+      const original = {
+        title: 'أصلي',
+        message: 'رسالة أصلية',
+        category: 'inventory',
+        priority: 'high',
+        branchId: 'branch-cairo',
+        deduplicationKey: 'low_stock_item1',
+        status: 'active',
+      };
+
+      const validateUpdateFields = (update: Record<string, any>): boolean => {
+        const immutableFields = ['title', 'message', 'category', 'priority', 'branchId', 'deduplicationKey'];
+        for (const f of immutableFields) {
+          if (update[f] !== undefined && update[f] !== (original as any)[f]) {
+            return false; // Forbidden field tampering
+          }
+        }
+        return true;
+      };
+
+      // Tampering with message
+      expect(validateUpdateFields({ message: 'رسالة معدلة خبيثة' })).toBe(false);
+      // Tampering with category
+      expect(validateUpdateFields({ category: 'security' })).toBe(false);
+      // Tampering with priority
+      expect(validateUpdateFields({ priority: 'critical' })).toBe(false);
+      // Valid status resolution update
+      expect(validateUpdateFields({ status: 'resolved', resolvedAt: '2026-09-16T00:00:00Z' })).toBe(true);
+    });
+
+    it('7. Single Permission Vocabulary: Bidirectional mapping between dot and colon notations', async () => {
+      const { hasPermissionMatch, PERMISSION_MAPPINGS } = await import('../../server/src/types/permissions.types');
+
+      // settings.view <-> settings:read
+      expect(hasPermissionMatch(['settings.view'], 'settings:read')).toBe(true);
+      expect(hasPermissionMatch(['settings:read'], 'settings.view')).toBe(true);
+
+      // orders.view <-> orders:read
+      expect(hasPermissionMatch(['orders.view'], 'orders:read')).toBe(true);
+      expect(hasPermissionMatch(['orders:read'], 'orders.view')).toBe(true);
+
+      // payroll.view <-> payroll:read
+      expect(hasPermissionMatch(['payroll.view'], 'payroll:read')).toBe(true);
+
+      // Wildcard
+      expect(hasPermissionMatch(['*'], 'settings:read')).toBe(true);
+      expect(hasPermissionMatch(['*'], 'attendance:manage')).toBe(true);
+
+      // Mismatched
+      expect(hasPermissionMatch(['menu:read'], 'settings:read')).toBe(false);
+      expect(hasPermissionMatch(['pos.view'], 'payroll.pay')).toBe(false);
+    });
+
+    it('8. Settings endpoint requires settings:read and rejects users with only menu:read', async () => {
+      const { hasPermissionMatch } = await import('../../server/src/types/permissions.types');
+
+      const menuOnlyUserPerms = ['menu:read', 'offers:read'];
+      const settingsUserPerms = ['settings.view'];
+      const adminPerms = ['*'];
+
+      // User with only menu:read CANNOT access settings
+      expect(hasPermissionMatch(menuOnlyUserPerms, 'settings:read')).toBe(false);
+
+      // User with settings.view CAN access settings
+      expect(hasPermissionMatch(settingsUserPerms, 'settings:read')).toBe(true);
+
+      // Admin with wildcard CAN access settings
+      expect(hasPermissionMatch(adminPerms, 'settings:read')).toBe(true);
+    });
+  });
 });

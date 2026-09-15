@@ -254,11 +254,67 @@ service cloud.firestore {
     // =========================================================================
     match /notifications/{notificationId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
+
+      // System Notifications Creation Guard:
+      // Strictly prevent client forgery of sensitive notifications (security, settings, payroll, expenses, etc.)
+      allow create: if isAuthenticated() && (
+        // 1. Sovereign Admins and Owners can create validated notifications
+        request.auth.token.role in ['owner', 'admin'] ||
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ['owner', 'admin'] ||
+
+        // 2. Staff members can only create notifications corresponding to their authorized department:
+        (
+          request.resource.data.category in ['orders', 'inventory', 'purchases', 'suppliers', 'waste', 'attendance', 'payroll', 'advances', 'expenses'] &&
+          request.resource.data.type in ['info', 'success', 'warning', 'critical'] &&
+          request.resource.data.priority in ['low', 'normal', 'high', 'critical'] &&
+          request.resource.data.status in ['active', 'resolved'] &&
+
+          // Non-admins can NEVER forge security or settings notifications
+          request.resource.data.category != 'security' &&
+          request.resource.data.category != 'settings' &&
+
+          (
+            // Orders: cashiers, waiters, managers, accountants
+            (request.resource.data.category == 'orders' &&
+              get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ['cashier', 'waiter', 'manager', 'accountant']) ||
+
+            // Inventory, Waste, Purchases, Suppliers: inventory, accountant, manager
+            (request.resource.data.category in ['inventory', 'waste', 'purchases', 'suppliers'] &&
+              get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ['inventory', 'manager', 'accountant']) ||
+
+            // Attendance: hr, manager
+            (request.resource.data.category == 'attendance' &&
+              get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ['hr', 'manager']) ||
+
+            // Payroll, Advances, Expenses: accountant
+            (request.resource.data.category in ['payroll', 'advances', 'expenses'] &&
+              get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ['accountant'])
+          )
+        )
+      );
+
+      // Notification Updates Guard:
+      // Content fields (title, message, category, priority, deduplicationKey, branchId, requiredPermission) are strictly IMMUTABLE.
+      // Only status / resolvedAt can be updated, and only by authorized personnel (admin/owner/manager or inventory for stock)
+      allow update: if isAuthenticated() && (
+        request.resource.data.title == resource.data.title &&
+        request.resource.data.message == resource.data.message &&
+        request.resource.data.category == resource.data.category &&
+        request.resource.data.priority == resource.data.priority &&
+        request.resource.data.branchId == resource.data.branchId &&
+        (!('deduplicationKey' in resource.data) || request.resource.data.deduplicationKey == resource.data.deduplicationKey) &&
+        (!('requiredPermission' in resource.data) || request.resource.data.requiredPermission == resource.data.requiredPermission) &&
+        (
+          request.auth.token.role in ['owner', 'admin'] ||
+          get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ['owner', 'admin', 'manager'] ||
+          (resource.data.category in ['inventory', 'waste'] &&
+            get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ['inventory'])
+        )
+      );
+
+      // Deletion is strictly restricted to Owner / Admin
       allow delete: if isAuthenticated() && (
-        request.auth.token.role == 'owner' || 
-        request.auth.token.role == 'admin' ||
+        request.auth.token.role in ['owner', 'admin'] || 
         get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ['owner', 'admin']
       );
     }

@@ -5,24 +5,9 @@ import { parseCredentialString } from '../utils/crypto.js';
 import { ForbiddenError, UnauthorizedError } from '../utils/errors.js';
 import { getFirebaseAuth, getFirestoreDb } from '../config/firebase.js';
 import { env } from '../config/environment.js';
-import { ApiPermission } from '../types/permissions.types.js';
+import { ApiPermission, API_PERMISSIONS, hasPermissionMatch } from '../types/permissions.types.js';
 
-const ADMIN_ALL_PERMISSIONS: ApiPermission[] = [
-  'api_clients:manage',
-  'menu:read',
-  'offers:read',
-  'branches:read',
-  'delivery:read',
-  'orders:create',
-  'orders:read',
-  'orders:update',
-  'orders:update_status',
-  'webhooks:manage',
-  'customers:read',
-  'reservations:create',
-  'reservations:read',
-  'attendance:manage',
-];
+const ADMIN_ALL_PERMISSIONS: (ApiPermission | string)[] = ['*', ...API_PERMISSIONS];
 
 export function createAuthMiddleware(clientService: ApiClientService = defaultApiClientService) {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -168,10 +153,9 @@ export function requirePermission(permission: ApiPermission | string) {
       }
 
       const clientPerms = req.apiClient.permissions || [];
-      const hasWildcard = clientPerms.includes('*' as any);
-      const hasDirectPerm = clientPerms.includes(permission as any);
+      const hasAccess = hasPermissionMatch(clientPerms, permission);
 
-      if (!hasWildcard && !hasDirectPerm) {
+      if (!hasAccess) {
         throw new ForbiddenError(
           `Permission denied: Missing required permission '${permission}'`
         );
