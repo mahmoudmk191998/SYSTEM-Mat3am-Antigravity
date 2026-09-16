@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { MainLayout } from '@/components/layout';
 import {
   ShieldAlert,
   Database,
@@ -284,32 +285,21 @@ export default function BackupPage() {
 
   if (!canView) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6" dir="rtl">
-        <Lock className="w-16 h-16 text-muted-foreground mb-4" />
-        <h2 className="text-xl font-bold">غير مصرح بالوصول</h2>
-        <p className="text-muted-foreground mt-2">لا تملك الصلاحيات الكافية للوصول لمركز النسخ الاحتياطي والتعافي.</p>
-      </div>
+      <MainLayout title="النسخ الاحتياطي والتعافي" backFallback="/">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6" dir="rtl">
+          <Lock className="w-16 h-16 text-muted-foreground mb-4" />
+          <h2 className="text-xl font-bold">غير مصرح بالوصول</h2>
+          <p className="text-muted-foreground mt-2">لا تملك الصلاحيات الكافية للوصول لمركز النسخ الاحتياطي والتعافي.</p>
+        </div>
+      </MainLayout>
     );
   }
 
   return (
-    <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-7xl font-cairo" dir="rtl">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/50 pb-5">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shadow-sm">
-              <Database className="w-5 h-5" />
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              النسخ الاحتياطي والتعافي من الكوارث
-            </h1>
-          </div>
-          <p className="text-sm text-muted-foreground mt-1 mr-13">
-            حماية متكاملة لبيانات المنشأة مع التحقق الرقمي (SHA-256)، والفحص الافتراضي (Dry Run)، والتعافي الآمن الخالي من المخاطر.
-          </p>
-        </div>
-
+    <MainLayout
+      title="النسخ الاحتياطي والتعافي من الكوارث"
+      subtitle="حماية متكاملة لبيانات المنشأة مع التحقق الرقمي (SHA-256)، والفحص الافتراضي (Dry Run)، والتعافي الآمن الخالي من المخاطر."
+      actions={
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={loadData} disabled={loading} className="gap-2">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -322,7 +312,9 @@ export default function BackupPage() {
             </Button>
           )}
         </div>
-      </div>
+      }
+    >
+      <div className="space-y-6 max-w-7xl font-cairo" dir="rtl">
 
       {/* Tabs Navigation */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-6">
@@ -1014,6 +1006,7 @@ export default function BackupPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </MainLayout>
   );
 }

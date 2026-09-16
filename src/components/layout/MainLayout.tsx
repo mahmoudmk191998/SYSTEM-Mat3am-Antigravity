@@ -1,5 +1,5 @@
 import { ReactNode, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/useAuth';
@@ -8,7 +8,7 @@ import { useProfile } from '@/hooks/useProfile';
 import { Sidebar, SidebarContent } from './Sidebar';
 import { MobileBottomNav } from './MobileBottomNav';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
-import { User, Wifi, WifiOff, LogOut, Moon, Sun, Lock, Clock, CalendarDays, Download, Menu, Eye, EyeOff } from 'lucide-react';
+import { User, Wifi, WifiOff, LogOut, Moon, Sun, Lock, Clock, CalendarDays, Download, Menu, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatDate } from '@/lib/formatters';
@@ -29,6 +29,9 @@ interface MainLayoutProps {
   title?: string;
   subtitle?: string;
   actions?: ReactNode;
+  showBack?: boolean;
+  onBack?: () => void;
+  backFallback?: string;
 }
 
 function LiveClock() {
@@ -85,7 +88,7 @@ function LiveClock() {
   );
 }
 
-export function MainLayout({ children, title, subtitle, actions }: MainLayoutProps) {
+export function MainLayout({ children, title, subtitle, actions, showBack, onBack, backFallback }: MainLayoutProps) {
   const { sidebarCollapsed, settings, bottomNavVisible, toggleBottomNav } = useAppStore();
   const isMobile = useIsMobile();
   const isOnline = navigator.onLine;
@@ -93,9 +96,23 @@ export function MainLayout({ children, title, subtitle, actions }: MainLayoutPro
   const { profile } = useProfile();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+      return;
+    }
+    // Check if there is valid in-app history in this session
+    if (window.history.state && typeof window.history.state.idx === 'number' && window.history.state.idx > 0) {
+      navigate(-1);
+    } else {
+      navigate(backFallback || '/');
+    }
+  };
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: any) => {
@@ -152,7 +169,7 @@ export function MainLayout({ children, title, subtitle, actions }: MainLayoutPro
               {isMobile && (
                 <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
                   <SheetTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-xl hover:bg-muted/80 touch-manipulation">
+                    <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-xl hover:bg-muted/80 touch-manipulation" aria-label="قائمة التنقل">
                       <Menu className="w-5 h-5 text-foreground" />
                     </Button>
                   </SheetTrigger>
@@ -163,6 +180,21 @@ export function MainLayout({ children, title, subtitle, actions }: MainLayoutPro
                   </SheetContent>
                 </Sheet>
               )}
+
+              {/* Mobile Back Button: Active on subpages or when showBack is explicitly requested */}
+              {isMobile && (showBack ?? (location.pathname !== '/' && location.pathname !== '/pos')) && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleBack}
+                  className="h-10 w-10 shrink-0 rounded-xl hover:bg-muted/80 touch-manipulation text-foreground"
+                  aria-label="الرجوع"
+                  title="الرجوع"
+                >
+                  <ArrowRight className="w-5 h-5 rtl:rotate-0 ltr:rotate-180" />
+                </Button>
+              )}
+
               <div className="flex flex-col min-w-0">
                 {title && <h1 className="text-base sm:text-lg md:text-2xl font-black bg-gradient-to-l from-foreground to-foreground/70 bg-clip-text text-transparent truncate tracking-tight">{title}</h1>}
                 {subtitle && <p className="text-[11px] sm:text-[13px] text-muted-foreground truncate hidden sm:block font-medium mt-0.5 opacity-80">{subtitle}</p>}

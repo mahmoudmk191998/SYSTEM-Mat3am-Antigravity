@@ -5,7 +5,8 @@ import {
   Search, X, Sun, Moon, LogOut, Receipt, Percent, ChefHat,
   Factory, UtensilsCrossed, Trash2, Truck, CalendarDays,
   PhoneCall, Bike, Clock, UserCog, BarChart3, Calculator,
-  Settings, Shield, Wrench, Puzzle, FileText, BookOpen
+  Settings, Shield, Wrench, Puzzle, FileText, BookOpen,
+  TrendingUp, Database
 } from 'lucide-react';
 import { useUserPermissions } from '@/hooks/usePermissions';
 import { useTheme } from '@/hooks/useTheme';
@@ -15,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-interface NavModule {
+export interface NavModule {
   path: string;
   label: string;
   icon: any;
@@ -24,7 +25,7 @@ interface NavModule {
   badge?: string;
 }
 
-const allAppModules: NavModule[] = [
+export const allAppModules: NavModule[] = [
   // المبيعات والعملاء
   { path: '/pos', label: 'نقاط البيع', icon: ShoppingCart, perms: ['pos.view'], category: 'المبيعات والعملاء' },
   { path: '/orders-history', label: 'سجل الطلبات', icon: Receipt, perms: ['pos.view'], category: 'المبيعات والعملاء' },
@@ -50,12 +51,14 @@ const allAppModules: NavModule[] = [
   { path: '/hr', label: 'الموظفين', icon: UserCog, perms: ['hr.view_employees'], category: 'العمليات والتشغيل' },
 
   // المالية والتقارير
+  { path: '/executive', label: 'اللوحة المالية والإغلاق', icon: TrendingUp, perms: ['financial_dashboard.view', 'reports.view', 'accounting.view'], category: 'المالية والتقارير' },
   { path: '/expenses', label: 'المصروفات', icon: Receipt, perms: ['expenses.view'], category: 'المالية والتقارير' },
   { path: '/accounting', label: 'الحسابات', icon: Calculator, perms: ['accounting.view'], category: 'المالية والتقارير' },
   { path: '/reports', label: 'التقارير', icon: BarChart3, perms: ['reports.view'], category: 'المالية والتقارير' },
 
   // النظام والإعدادات
   { path: '/settings', label: 'الإعدادات', icon: Settings, perms: ['settings.view'], category: 'النظام والإدارة' },
+  { path: '/backup', label: 'النسخ الاحتياطي والتعافي', icon: Database, perms: ['backup.view', 'settings.manage'], category: 'النظام والإدارة' },
   { path: '/maintenance', label: 'الصيانة', icon: Wrench, perms: ['maintenance.view'], category: 'النظام والإدارة' },
   { path: '/permissions', label: 'الصلاحيات', icon: Shield, perms: ['permissions.manage'], category: 'النظام والإدارة' },
   { path: '/integrations', label: 'التكاملات', icon: Puzzle, perms: ['integrations.view'], category: 'النظام والإدارة' },
@@ -286,7 +289,7 @@ export function MobileBottomNav() {
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
                     {modules.map((mod) => {
                       const Icon = mod.icon;
-                      const isCurrent = pathname === mod.path;
+                      const isCurrent = pathname === mod.path || pathname.startsWith(mod.path + '/');
 
                       return (
                         <button
