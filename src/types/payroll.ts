@@ -16,6 +16,8 @@ export interface AttendanceSummary {
   earlyLeaveMinutes: number;
   totalHours: number;
   deductionReason: string;
+  leaveDays?: number;
+  unpaidLeaveDays?: number;
 }
 
 export interface PayrollRecord {

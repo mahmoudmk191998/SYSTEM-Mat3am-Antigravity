@@ -5,6 +5,7 @@ export const ROUTE_ALIASES: Record<string, string> = {
   '/payroll': '/hr?tab=reports',
   '/advances': '/hr?tab=reports&section=advances',
   '/attendance': '/hr?tab=attendance',
+  '/leaves': '/hr?tab=leaves',
 };
 
 // Map of notification categories to real application routes
@@ -12,6 +13,7 @@ export const CATEGORY_DEFAULT_ROUTES: Record<string, string> = {
   payroll: '/hr?tab=reports',
   advances: '/hr?tab=reports&section=advances',
   attendance: '/hr?tab=attendance',
+  leaves: '/hr?tab=leaves',
   orders: '/orders-history',
   inventory: '/inventory',
   purchases: '/purchasing',
@@ -58,6 +60,7 @@ export const VALID_ROUTE_PREFIXES = [
   // Redirect routes:
   '/payroll',
   '/advances',
+  '/leaves',
 ];
 
 export interface NotificationRouteInput {

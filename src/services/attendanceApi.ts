@@ -336,6 +336,31 @@ export async function submitPublicClock(payload: {
       updated_at: isoNow,
     });
 
+    let onApprovedLeaveNotice = false;
+    try {
+      const leaveQ = query(
+        collection(db, 'employee_leaves'),
+        where('tenant_id', '==', tenantId),
+        where('employee_id', '==', employeeId),
+        where('status', '==', 'approved')
+      );
+      const leaveSnap = await getDocs(leaveQ);
+      for (const d of leaveSnap.docs) {
+        const l = d.data();
+        if (l.start_date <= todayStr && todayStr <= l.end_date) {
+          onApprovedLeaveNotice = true;
+          break;
+        }
+      }
+    } catch (lErr) {
+      // Non-blocking fallback
+    }
+
+    const baseMsg = status === 'late' ? `تم تسجيل الحضور (متأخر ${lateMinutes} دقيقة)` : 'تم تسجيل الحضور بنجاح';
+    const finalMsg = onApprovedLeaveNotice
+      ? `${baseMsg} (ملاحظة: الموظف لديه إجازة معتمدة مسجلة اليوم)`
+      : baseMsg;
+
     return {
       type: 'check_in',
       recordId: docRef.id,
@@ -343,7 +368,7 @@ export async function submitPublicClock(payload: {
       time: timeStr,
       status,
       lateMinutes,
-      message: status === 'late' ? `تم تسجيل الحضور (متأخر ${lateMinutes} دقيقة)` : 'تم تسجيل الحضور بنجاح',
+      message: finalMsg,
     };
   }
 

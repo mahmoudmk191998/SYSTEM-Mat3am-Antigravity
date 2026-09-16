@@ -7,6 +7,7 @@ import type {
   SalaryPayment,
   AttendanceSummary,
 } from '@/types/payroll';
+import type { EmployeeLeave } from '@/types/leave';
 
 export interface EmployeeData {
   id: string;
@@ -51,6 +52,7 @@ export interface PayrollCalculationOptions {
     amount?: number;
     reason?: string;
   };
+  approvedLeaves?: EmployeeLeave[];
 }
 
 /**
@@ -82,17 +84,47 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
   const dailyRate = baseSalary > 0 ? baseSalary / 30 : 0;
   const hourlyRate = dailyRate / 8;
 
-  // 2. Attendance Metrics for the period
+  // 2. Attendance & Approved Leaves Metrics for the period
   const empAttendance = attendanceRecords.filter((a) => {
     const empId = a.employeeId || a.employee_id;
     return empId === employee.id && a.date && a.date.startsWith(period);
+  });
+
+  const empApprovedLeaves = (options.approvedLeaves || []).filter((l) => {
+    return l.employee_id === employee.id && l.status === 'approved';
+  });
+
+  // Collect specific dates covered by approved leaves in this period
+  const approvedLeaveDates = new Set<string>();
+  const approvedUnpaidDates = new Set<string>();
+
+  empApprovedLeaves.forEach((l) => {
+    const start = new Date(l.start_date);
+    const end = new Date(l.end_date);
+    let curr = new Date(start);
+    while (curr <= end) {
+      const dStr = curr.toISOString().split('T')[0];
+      if (dStr.startsWith(period)) {
+        approvedLeaveDates.add(dStr);
+        if (!l.is_paid) {
+          approvedUnpaidDates.add(dStr);
+        }
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
   });
 
   const attendedDays = empAttendance.filter(
     (a) => a.status === 'present' || a.status === 'late' || a.status === 'early_leave'
   ).length;
 
-  const absentDays = empAttendance.filter((a) => a.status === 'absent').length;
+  // Crucial: Absent days should NOT count days that have an approved leave!
+  const absentDays = empAttendance.filter(
+    (a) => a.status === 'absent' && !approvedLeaveDates.has(a.date)
+  ).length;
+
+  const unpaidLeaveDays = approvedUnpaidDates.size;
+  const leaveDays = approvedLeaveDates.size;
 
   const lateCount = empAttendance.filter(
     (a) => a.status === 'late' || (Number(a.lateMinutes) || 0) > 0
@@ -122,13 +154,19 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
     lateDeductions = Math.round((totalLateMinutes / 60) * hourlyRate);
   }
 
-  // Absence deduction (dailyRate per absent day)
+  // Absence deduction (dailyRate per unauthorized absent day)
   let absenceDeductions = 0;
   if (absentDays > 0) {
     absenceDeductions = Math.round(absentDays * dailyRate);
   }
 
-  const attendanceDeductions = lateDeductions + absenceDeductions;
+  // Approved Unpaid leave deduction (dailyRate per approved unpaid leave day)
+  let unpaidLeaveDeductions = 0;
+  if (unpaidLeaveDays > 0) {
+    unpaidLeaveDeductions = Math.round(unpaidLeaveDays * dailyRate);
+  }
+
+  let attendanceDeductions = lateDeductions + absenceDeductions + unpaidLeaveDeductions;
 
   // Build human-readable breakdown explanation
   const deductionParts: string[] = [];
@@ -138,11 +176,14 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
   if (absenceDeductions > 0) {
     deductionParts.push(`غياب: ${absenceDeductions} ج.م (${absentDays} يوم)`);
   }
+  if (unpaidLeaveDeductions > 0) {
+    deductionParts.push(`إجازة بدون مرتب: ${unpaidLeaveDeductions} ج.م (${unpaidLeaveDays} يوم)`);
+  }
   const deductionReason = deductionParts.length > 0
     ? deductionParts.join(' | ')
     : 'لا توجد خصومات حضور';
 
-  const attendanceSummary: AttendanceSummary = {
+  let attendanceSummary: AttendanceSummary = {
     attendedDays,
     absentDays,
     lateCount,
@@ -150,7 +191,17 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
     earlyLeaveMinutes,
     totalHours: Math.round(totalHours * 10) / 10,
     deductionReason,
+    leaveDays,
+    unpaidLeaveDays,
   };
+
+  // If historical snapshot is finalized as paid, strictly preserve historical attendance deductions
+  if (existingRecord?.status === 'paid' && existingRecord.attendanceDeductions !== undefined) {
+    attendanceDeductions = existingRecord.attendanceDeductions;
+    if (existingRecord.attendanceSummary) {
+      attendanceSummary = existingRecord.attendanceSummary as AttendanceSummary;
+    }
+  }
 
   // 4. Overtime & Allowances
   let overtime = 0;
@@ -222,7 +273,9 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
       p.status === 'completed'
   );
 
-  const totalPaid = empPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const totalPaid = empPayments.length > 0
+    ? empPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+    : (existingRecord?.totalPaid !== undefined ? Number(existingRecord.totalPaid) : 0);
   const remaining = Math.max(0, netSalary - totalPaid);
 
   let status: PayrollStatus = 'unpaid';

@@ -348,6 +348,37 @@ service cloud.firestore {
       );
     }
 
+    // =========================================================================
+    // Employee Leave Management Subsystem
+    // =========================================================================
+    match /employee_leaves/{leaveId} {
+      allow read: if isAuthenticated() && (
+        resource == null ||
+        hasTenantAccess(resource.data.tenant_id)
+      );
+
+      allow create: if isAuthenticated() && (
+        hasTenantAccess(request.resource.data.tenant_id) &&
+        (
+          request.auth.token.role in ['owner', 'admin', 'hr', 'manager'] ||
+          get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ['owner', 'admin', 'hr', 'manager']
+        )
+      );
+
+      allow update: if isAuthenticated() && (
+        hasTenantAccess(resource.data.tenant_id) &&
+        (
+          request.auth.token.role in ['owner', 'admin', 'hr', 'manager'] ||
+          get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ['owner', 'admin', 'hr', 'manager']
+        )
+      );
+
+      allow delete: if isAuthenticated() && (
+        request.auth.token.role in ['owner', 'admin'] ||
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ['owner', 'admin']
+      );
+    }
+
     // Default catch-all: reject unauthenticated access to any unspecified document
     match /{document=**} {
       allow read, write: if isAuthenticated();

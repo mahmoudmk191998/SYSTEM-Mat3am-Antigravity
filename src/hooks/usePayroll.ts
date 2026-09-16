@@ -111,7 +111,8 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
       period: PayrollPeriod,
       employees: EmployeeData[],
       attendance: AttendanceRecordData[],
-      hrSettings?: any
+      hrSettings?: any,
+      leaves?: any[]
     ): PayrollRecord[] => {
       return employees.map((emp) => {
         // Find existing stored payroll snapshot if any
@@ -127,6 +128,7 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
           payments: salaryPayments,
           existingRecord: existing,
           hrSettings,
+          approvedLeaves: leaves,
         });
       });
     },

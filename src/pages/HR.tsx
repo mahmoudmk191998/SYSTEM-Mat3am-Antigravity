@@ -9,7 +9,8 @@ import {
   QrCode, Printer, Download, Copy, RefreshCw, KeyRound, MapPin,
   AlertTriangle, Sliders, FileText, CheckCircle2, XCircle, ArrowUpDown,
   Lock, Phone, ChevronRight, UserMinus, UserCheck, Calculator,
-  ChevronDown, FileDown, Image as ImageIcon
+  Lock, Phone, ChevronRight, UserMinus, UserCheck, Calculator,
+  ChevronDown, FileDown, Image as ImageIcon, CalendarOff
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,9 +35,15 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { useHR, useTenantBranch } from '@/hooks/useDatabase';
 import { usePayroll } from '@/hooks/usePayroll';
+import { useAuth } from '@/hooks/useAuth';
 import { PayrollOverviewCards } from '@/components/payroll/PayrollOverviewCards';
 import { PayrollTable } from '@/components/payroll/PayrollTable';
 import { EmployeeFinancialTab } from '@/components/payroll/EmployeeFinancialTab';
+import { LeavesTab } from '@/components/hr/LeavesTab';
+import { calculateEmployeeLeaveBalance } from '@/services/leave.service';
+import { LEAVE_TYPE_CONFIG, LEAVE_STATUS_CONFIG } from '@/types/leave';
+import { db } from '@/lib/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { formatWorkedHours, calculateLateMinutes, timeStringToMinutes } from '@/lib/attendanceSecurity';
@@ -108,16 +115,33 @@ export default function HR() {
   });
 
   const { currency, number } = useFormatters();
-
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
 
-  // Active Tab: initializes from URL search param (e.g. /hr?tab=reports or /hr?tab=payroll)
+  const [preselectedLeaveEmployeeId, setPreselectedLeaveEmployeeId] = useState<string | null>(null);
+
+  // Real-time Leaves Subscription for Payroll and Profile integration
+  const [leaves, setLeaves] = useState<any[]>([]);
+  useEffect(() => {
+    if (!tenantId) return;
+    const unsub = onSnapshot(
+      query(collection(db, 'employee_leaves'), where('tenant_id', '==', tenantId)),
+      (snap) => {
+        setLeaves(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      (err) => console.warn('Leaves fetch warning:', err)
+    );
+    return () => unsub();
+  }, [tenantId]);
+
+  // Active Tab: initializes from URL search param (e.g. /hr?tab=reports or /hr?tab=leaves)
   const [activeTab, setActiveTab] = useState(() => {
     const tabParam = searchParams.get('tab');
     if (tabParam === 'reports' || tabParam === 'payroll') return 'reports';
     if (tabParam === 'attendance') return 'attendance';
     if (tabParam === 'qr') return 'qr';
     if (tabParam === 'shifts') return 'shifts';
+    if (tabParam === 'leaves') return 'leaves';
     if (tabParam === 'settings') return 'settings';
     return 'employees';
   });
@@ -133,6 +157,8 @@ export default function HR() {
       setActiveTab('qr');
     } else if (tabParam === 'shifts') {
       setActiveTab('shifts');
+    } else if (tabParam === 'leaves') {
+      setActiveTab('leaves');
     } else if (tabParam === 'settings') {
       setActiveTab('settings');
     } else if (tabParam === 'employees') {
@@ -915,6 +941,10 @@ export default function HR() {
             <Calculator className="w-4 h-4" />
             التقارير ومسير الرواتب
           </TabsTrigger>
+          <TabsTrigger value="leaves" className="gap-2">
+            <CalendarOff className="w-4 h-4" />
+            الإجازات
+          </TabsTrigger>
           <TabsTrigger value="settings" className="gap-2">
             <Sliders className="w-4 h-4" />
             إعدادات الموارد البشرية
@@ -1599,9 +1629,9 @@ export default function HR() {
         {/* TAB 5: REPORTS & PAYROLL INTEGRATION                                      */}
         {/* ========================================================================= */}
         <TabsContent value="reports" className="space-y-6">
-          <PayrollOverviewCards kpis={getKPIs(getPayrollForPeriod(payrollPeriod, employees, attendance, hrSettings))} />
+          <PayrollOverviewCards kpis={getKPIs(getPayrollForPeriod(payrollPeriod, employees, attendance, hrSettings, leaves))} />
           <PayrollTable
-            periodRecords={getPayrollForPeriod(payrollPeriod, employees, attendance, hrSettings)}
+            periodRecords={getPayrollForPeriod(payrollPeriod, employees, attendance, hrSettings, leaves)}
             allPayments={salaryPayments}
             allAdvances={advances}
             employees={employees}
@@ -1613,6 +1643,21 @@ export default function HR() {
             onDeleteAdvance={deleteAdvance}
             onCancelAdvance={cancelAdvance}
             isSubmittingPayment={isSubmittingPayment}
+          />
+        </TabsContent>
+
+        {/* ========================================================================= */}
+        {/* TAB 6: LEAVES MANAGEMENT                                                  */}
+        {/* ========================================================================= */}
+        <TabsContent value="leaves" className="space-y-4">
+          <LeavesTab
+            tenantId={tenantId || 'tenant_main'}
+            branchId={branchId}
+            employees={employees}
+            shifts={shifts}
+            user={user}
+            preselectedEmployeeId={preselectedLeaveEmployeeId}
+            onClearPreselectedEmployee={() => setPreselectedLeaveEmployeeId(null)}
           />
         </TabsContent>
 
@@ -2069,12 +2114,15 @@ export default function HR() {
           {profileEmployee && (
             <div className="space-y-4 py-2">
               <Tabs defaultValue="financial" className="w-full">
-                <TabsList className="grid grid-cols-2 bg-slate-900 border border-slate-800 mb-3">
+                <TabsList className="grid grid-cols-3 bg-slate-900 border border-slate-800 mb-3">
                   <TabsTrigger value="financial" className="text-xs font-bold">
                     البيانات المالية والسلف
                   </TabsTrigger>
                   <TabsTrigger value="attendance" className="text-xs font-bold">
                     سجل الحضور والغياب
+                  </TabsTrigger>
+                  <TabsTrigger value="leaves" className="text-xs font-bold">
+                    الإجازات والأرصدة
                   </TabsTrigger>
                 </TabsList>
 
@@ -2172,6 +2220,104 @@ export default function HR() {
                                   <TableRow>
                                     <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
                                       لا توجد سجلات حضور لهذا الموظف حتى الآن
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </TabsContent>
+
+                {/* TAB 3: LEAVES & BALANCE */}
+                <TabsContent value="leaves" className="space-y-3">
+                  {(() => {
+                    const empLeaves = leaves.filter((l) => l.employee_id === profileEmployee.id);
+                    const bal = calculateEmployeeLeaveBalance(empLeaves, profileEmployee.annual_leave_entitlement);
+
+                    return (
+                      <>
+                        <div className="flex items-center justify-between pb-1">
+                          <h4 className="text-xs font-bold text-slate-300">سجل ورصيد الإجازات</h4>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setPreselectedLeaveEmployeeId(profileEmployee.id);
+                              setProfileEmployee(null);
+                              setActiveTab('leaves');
+                            }}
+                            className="h-8 text-xs gap-1.5"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            منح إجازة لهذا الموظف
+                          </Button>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
+                            <p className="text-base font-bold text-foreground">
+                              {bal.entitlement !== null ? `${bal.entitlement} يوم` : 'غير محدد'}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">الرصيد السنوي المستحق</p>
+                          </div>
+                          <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
+                            <p className="text-base font-bold text-emerald-400">{bal.usedPaidDays} يوم</p>
+                            <p className="text-[10px] text-muted-foreground">إجازات مدفوعة مستخدمة</p>
+                          </div>
+                          <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
+                            <p className="text-base font-bold text-rose-400">{bal.usedUnpaidDays} يوم</p>
+                            <p className="text-[10px] text-muted-foreground">إجازات بدون مرتب</p>
+                          </div>
+                          <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
+                            <p className="text-base font-bold text-primary">
+                              {bal.remainingDays !== null ? `${bal.remainingDays} يوم` : '-'}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">الرصيد المتبقي</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 pt-2">
+                          <h4 className="text-xs font-bold text-slate-300">السجل التاريخي لإجازات الموظف</h4>
+                          <div className="max-h-60 overflow-y-auto rounded-lg border border-slate-800">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>النوع</TableHead>
+                                  <TableHead>من</TableHead>
+                                  <TableHead>إلى</TableHead>
+                                  <TableHead>الأيام الفعلية</TableHead>
+                                  <TableHead>النوع المالي</TableHead>
+                                  <TableHead>الحالة</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {empLeaves.map((l) => (
+                                  <TableRow key={l.id}>
+                                    <TableCell className="text-xs font-medium">
+                                      {LEAVE_TYPE_CONFIG[l.leave_type]?.labelAr || l.leave_type}
+                                    </TableCell>
+                                    <TableCell className="font-mono text-xs">{l.start_date}</TableCell>
+                                    <TableCell className="font-mono text-xs">{l.end_date}</TableCell>
+                                    <TableCell className="text-xs font-bold text-primary">{l.working_days_count} يوم</TableCell>
+                                    <TableCell className="text-xs">
+                                      <Badge variant="outline" className={l.is_paid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]' : 'bg-rose-500/10 text-rose-400 border-rose-500/20 text-[10px]'}>
+                                        {l.is_paid ? 'مدفوعة' : 'بدون مرتب'}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant="outline" className={`text-[10px] ${LEAVE_STATUS_CONFIG[l.status]?.bg} ${LEAVE_STATUS_CONFIG[l.status]?.color}`}>
+                                        {LEAVE_STATUS_CONFIG[l.status]?.labelAr || l.status}
+                                      </Badge>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                                {empLeaves.length === 0 && (
+                                  <TableRow>
+                                    <TableCell colSpan={6} className="text-center py-6 text-muted-foreground text-xs">
+                                      لا توجد إجازات مسجلة لهذا الموظف
                                     </TableCell>
                                   </TableRow>
                                 )}
