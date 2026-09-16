@@ -9,7 +9,6 @@ import {
   QrCode, Printer, Download, Copy, RefreshCw, KeyRound, MapPin,
   AlertTriangle, Sliders, FileText, CheckCircle2, XCircle, ArrowUpDown,
   Lock, Phone, ChevronRight, UserMinus, UserCheck, Calculator,
-  Lock, Phone, ChevronRight, UserMinus, UserCheck, Calculator,
   ChevronDown, FileDown, Image as ImageIcon, CalendarOff
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -252,6 +251,9 @@ export default function HR() {
       status: e.status || 'active',
       pinSet: Boolean(e.pin_set || e.pin_hash || e.pin),
       shiftId: e.default_shift_id || e.shift_id || null,
+      shift_id: e.shift_id || e.default_shift_id || null,
+      default_shift_id: e.default_shift_id || e.shift_id || null,
+      annual_leave_entitlement: e.annual_leave_entitlement ?? null,
       createdAt: e.created_at || '',
     }));
   }, [dbEmployees]);
@@ -1654,7 +1656,7 @@ export default function HR() {
             tenantId={tenantId || 'tenant_main'}
             branchId={branchId}
             employees={employees}
-            shifts={shifts}
+            shifts={dbShifts || []}
             user={user}
             preselectedEmployeeId={preselectedLeaveEmployeeId}
             onClearPreselectedEmployee={() => setPreselectedLeaveEmployeeId(null)}
@@ -2294,26 +2296,30 @@ export default function HR() {
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
-                                {empLeaves.map((l) => (
-                                  <TableRow key={l.id}>
-                                    <TableCell className="text-xs font-medium">
-                                      {LEAVE_TYPE_CONFIG[l.leave_type]?.labelAr || l.leave_type}
-                                    </TableCell>
-                                    <TableCell className="font-mono text-xs">{l.start_date}</TableCell>
-                                    <TableCell className="font-mono text-xs">{l.end_date}</TableCell>
-                                    <TableCell className="text-xs font-bold text-primary">{l.working_days_count} يوم</TableCell>
-                                    <TableCell className="text-xs">
-                                      <Badge variant="outline" className={l.is_paid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]' : 'bg-rose-500/10 text-rose-400 border-rose-500/20 text-[10px]'}>
-                                        {l.is_paid ? 'مدفوعة' : 'بدون مرتب'}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                      <Badge variant="outline" className={`text-[10px] ${LEAVE_STATUS_CONFIG[l.status]?.bg} ${LEAVE_STATUS_CONFIG[l.status]?.color}`}>
-                                        {LEAVE_STATUS_CONFIG[l.status]?.labelAr || l.status}
-                                      </Badge>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
+                                {empLeaves.map((l) => {
+                                  const typeCfg = LEAVE_TYPE_CONFIG[l.leave_type] || LEAVE_TYPE_CONFIG.other;
+                                  const statusCfg = LEAVE_STATUS_CONFIG[l.status] || LEAVE_STATUS_CONFIG.pending;
+                                  return (
+                                    <TableRow key={l.id}>
+                                      <TableCell className="text-xs font-medium">
+                                        {typeCfg?.labelAr || l.leave_type || '—'}
+                                      </TableCell>
+                                      <TableCell className="font-mono text-xs">{l.start_date || '—'}</TableCell>
+                                      <TableCell className="font-mono text-xs">{l.end_date || '—'}</TableCell>
+                                      <TableCell className="text-xs font-bold text-primary">{l.working_days_count ?? 0} يوم</TableCell>
+                                      <TableCell className="text-xs">
+                                        <Badge variant="outline" className={l.is_paid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]' : 'bg-rose-500/10 text-rose-400 border-rose-500/20 text-[10px]'}>
+                                          {l.is_paid ? 'مدفوعة' : 'بدون مرتب'}
+                                        </Badge>
+                                      </TableCell>
+                                      <TableCell>
+                                        <Badge variant="outline" className={`text-[10px] ${statusCfg?.bg || ''} ${statusCfg?.color || ''}`}>
+                                          {statusCfg?.labelAr || l.status || '—'}
+                                        </Badge>
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                })}
                                 {empLeaves.length === 0 && (
                                   <TableRow>
                                     <TableCell colSpan={6} className="text-center py-6 text-muted-foreground text-xs">

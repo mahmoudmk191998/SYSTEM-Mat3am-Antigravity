@@ -355,4 +355,82 @@ describe('Employee Leave Management Integration Suite', () => {
       expect(resolved).toBe('/hr?tab=leaves');
     });
   });
+
+  describe('10. Crash Prevention & Legacy Employee Compatibility', () => {
+    it('handles legacy employee without leave entitlement safely', () => {
+      const legacyEmployee: EmployeeData = {
+        id: 'emp_legacy',
+        name: 'موظف قديم',
+        role: 'مساعد طاهي',
+        salary: 4500,
+        // no annual_leave_entitlement
+      };
+
+      const bal = calculateEmployeeLeaveBalance([], (legacyEmployee as any).annual_leave_entitlement);
+      expect(bal.entitlement).toBeNull();
+      expect(bal.remainingDays).toBeNull();
+      expect(bal.usedPaidDays).toBe(0);
+      expect(bal.usedUnpaidDays).toBe(0);
+    });
+
+    it('handles employee without shift schedule safely (defaults to weekend logic)', () => {
+      // No shiftDays provided -> should not throw, should exclude Friday (2026-10-02)
+      const res = calculateLeaveWorkingDays('2026-10-01', '2026-10-03', undefined);
+      expect(res.requestedDays).toBe(3);
+      expect(res.workingDaysCount).toBe(2);
+      expect(res.offDaysCount).toBe(1);
+    });
+
+    it('handles empty leaves array in payroll engine without crash', () => {
+      const payroll = calculateEmployeePayroll({
+        employee: dummyEmployee,
+        period: '2026-10',
+        attendanceRecords: [],
+        advances: [],
+        payments: [],
+        approvedLeaves: [],
+      });
+      expect(payroll.attendanceSummary.leaveDays).toBe(0);
+      expect(payroll.attendanceSummary.unpaidLeaveDays).toBe(0);
+      expect(payroll.netSalary).toBe(6000);
+    });
+
+    it('handles malformed / invalid leave dates in payroll engine without infinite loop or crash', () => {
+      const malformedLeaves = [
+        {
+          id: 'leave_bad_1',
+          employee_id: dummyEmployee.id,
+          status: 'approved',
+          start_date: 'invalid-date',
+          end_date: '2026-10-05',
+          is_paid: true,
+        },
+        {
+          id: 'leave_bad_2',
+          employee_id: dummyEmployee.id,
+          status: 'approved',
+          start_date: '2026-10-10',
+          end_date: '2026-10-05', // start > end
+          is_paid: true,
+        },
+      ];
+
+      const payroll = calculateEmployeePayroll({
+        employee: dummyEmployee,
+        period: '2026-10',
+        attendanceRecords: [],
+        advances: [],
+        payments: [],
+        approvedLeaves: malformedLeaves as any,
+      });
+      expect(payroll.netSalary).toBe(6000);
+    });
+
+    it('safely calculates leave working days for empty, null, or malformed inputs', () => {
+      expect(calculateLeaveWorkingDays('', '')).toEqual({ requestedDays: 0, workingDaysCount: 0, offDaysCount: 0 });
+      expect(calculateLeaveWorkingDays(null as any, undefined as any)).toEqual({ requestedDays: 0, workingDaysCount: 0, offDaysCount: 0 });
+      expect(calculateLeaveWorkingDays('bad-date', 'another-bad-date')).toEqual({ requestedDays: 0, workingDaysCount: 0, offDaysCount: 0 });
+    });
+  });
 });
+

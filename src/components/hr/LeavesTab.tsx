@@ -198,9 +198,11 @@ export function LeavesTab({
 
   // Selected Employee's Shift Days
   const selectedEmpShiftDays = useMemo(() => {
-    if (!selectedEmp) return undefined;
-    const shift = shifts.find((s) => s.id === (selectedEmp.shift_id || selectedEmp.default_shift_id));
-    return shift?.days || undefined;
+    if (!selectedEmp || !Array.isArray(shifts)) return undefined;
+    const shiftId = selectedEmp.shift_id || selectedEmp.default_shift_id || selectedEmp.shiftId;
+    if (!shiftId) return undefined;
+    const shift = shifts.find((s) => s?.id === shiftId);
+    return Array.isArray(shift?.days) ? shift.days : undefined;
   }, [selectedEmp, shifts]);
 
   // Live calculation of requested and working leave days
@@ -215,7 +217,7 @@ export function LeavesTab({
   // Selected Employee's current Leave Balance
   const selectedEmpBalance = useMemo(() => {
     if (!selectedEmp) return null;
-    const empLeaves = leaves.filter((l) => l.employee_id === selectedEmp.id);
+    const empLeaves = (leaves || []).filter((l) => l && l.employee_id === selectedEmp.id);
     return calculateEmployeeLeaveBalance(empLeaves, selectedEmp.annual_leave_entitlement);
   }, [selectedEmp, leaves]);
 
@@ -226,19 +228,21 @@ export function LeavesTab({
     next7Days.setDate(next7Days.getDate() + 7);
     const next7DaysStr = next7Days.toISOString().split('T')[0];
 
-    const currentLeaves = leaves.filter(
-      (l) => l.status === 'approved' && l.start_date <= today && today <= l.end_date
+    const safeLeaves = leaves || [];
+
+    const currentLeaves = safeLeaves.filter(
+      (l) => l && l.status === 'approved' && l.start_date && l.end_date && l.start_date <= today && today <= l.end_date
     );
 
-    const upcomingLeaves = leaves.filter(
-      (l) => l.status === 'approved' && l.start_date > today && l.start_date <= next7DaysStr
+    const upcomingLeaves = safeLeaves.filter(
+      (l) => l && l.status === 'approved' && l.start_date && l.start_date > today && l.start_date <= next7DaysStr
     );
 
-    const pendingLeaves = leaves.filter((l) => l.status === 'pending');
+    const pendingLeaves = safeLeaves.filter((l) => l && l.status === 'pending');
 
     const thisMonthPrefix = today.substring(0, 7);
-    const approvedThisMonth = leaves.filter(
-      (l) => l.status === 'approved' && (l.start_date || '').startsWith(thisMonthPrefix)
+    const approvedThisMonth = safeLeaves.filter(
+      (l) => l && l.status === 'approved' && (l.start_date || '').startsWith(thisMonthPrefix)
     );
 
     return {

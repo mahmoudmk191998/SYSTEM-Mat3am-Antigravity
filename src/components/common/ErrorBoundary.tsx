@@ -26,8 +26,13 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({ errorInfo });
-    // In production, we log safely without dumping secrets or tokens
-    console.error('Unhandled UI exception captured by ErrorBoundary:', error.message);
+    // In development, log full error and component stack for fast root-cause identification
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[ErrorBoundary DEV] Caught error:', error);
+      console.error('[ErrorBoundary DEV] Component stack:', errorInfo?.componentStack);
+    } else {
+      console.error('Unhandled UI exception captured by ErrorBoundary:', error.message);
+    }
   }
 
   private handleReset = () => {

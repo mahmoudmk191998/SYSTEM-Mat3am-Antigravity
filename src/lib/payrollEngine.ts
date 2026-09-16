@@ -99,8 +99,10 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
   const approvedUnpaidDates = new Set<string>();
 
   empApprovedLeaves.forEach((l) => {
+    if (!l.start_date || !l.end_date) return;
     const start = new Date(l.start_date);
     const end = new Date(l.end_date);
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return;
     let curr = new Date(start);
     while (curr <= end) {
       const dStr = curr.toISOString().split('T')[0];
