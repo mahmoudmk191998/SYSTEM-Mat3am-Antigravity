@@ -161,6 +161,9 @@ service cloud.firestore {
     match /accounting_records/{recordId} {
       allow read, write: if isAuthenticated();
     }
+    match /daily_closings/{closingId} {
+      allow read, write: if isAuthenticated();
+    }
     match /expenses/{expenseId} {
       allow read, write: if isAuthenticated();
     }

@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, ShoppingCart, ChefHat, CalendarDays, UtensilsCrossed,
   Package, Truck, Factory, Bike, Users, Percent, UserCog, BarChart3,
-  Settings, FileText, Puzzle, BookOpen, ChevronRight, Building2, Menu, Shield, Receipt, ChevronDown, Clock, Gift, Wrench, Calculator, PhoneCall, Trash2, Eye, EyeOff
+  Settings, FileText, Puzzle, BookOpen, ChevronRight, Building2, Menu, Shield, Receipt, ChevronDown, Clock, Gift, Wrench, Calculator, PhoneCall, Trash2, Eye, EyeOff, TrendingUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -63,6 +63,7 @@ const navGroups = [
   {
     title: 'المالية والتقارير',
     items: [
+      { path: '/executive', label: 'اللوحة المالية والإغلاق', icon: TrendingUp, perms: ['financial_dashboard.view', 'reports.view', 'accounting.view'] },
       { path: '/reports', label: 'التقارير والتحليلات', icon: BarChart3, perms: ['reports.view'] },
       { path: '/accounting', label: 'الحسابات العامة', icon: Calculator, perms: ['accounting.view'] },
       { path: '/expenses', label: 'المصروفات', icon: Receipt, perms: ['expenses.view'] },
