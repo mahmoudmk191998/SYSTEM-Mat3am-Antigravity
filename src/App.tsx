@@ -156,6 +156,8 @@ function AppRoutes() {
         <Route path="/accounting" element={<ProtectedRoute requiredPerms={['accounting.view']}><Accounting /></ProtectedRoute>} />
         <Route path="/callcenter" element={<ProtectedRoute requiredPerms={['callcenter.view']}><CallCenter /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><NotificationsHistory /></ProtectedRoute>} />
+        <Route path="/payroll" element={<Navigate to="/hr?tab=reports" replace />} />
+        <Route path="/advances" element={<Navigate to="/hr?tab=reports&section=advances" replace />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>

@@ -41,7 +41,7 @@ import {
 
 // Colors for charts
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
-const CATEGORIES: ExpenseCategory[] = ['رواتب', 'مشتريات', 'صيانة', 'أخرى'];
+const CATEGORIES: ExpenseCategory[] = ['رواتب', 'مشتريات', 'صيانة', 'سلف الموظفين', 'أخرى'];
 
 export default function Expenses() {
   const { tenantId, branchId } = useTenantBranch();
@@ -230,9 +230,28 @@ export default function Expenses() {
   }, [filteredAndCategorizedExpenses]);
 
   // Statistics
-  const totalExpenses = useMemo(() => {
-    return activeExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  // 1. Total Cash Outflow from Safe (includes Operating Expenses + Employee Advances)
+  const totalCashOutflows = useMemo(() => {
+    return activeExpenses
+      .filter((exp) => exp.affectsCashFlow !== false)
+      .reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
   }, [activeExpenses]);
+
+  // 2. Operating Expenses (strictly excludes employee advances to protect Net Profit calculation)
+  const operatingExpenses = useMemo(() => {
+    return activeExpenses
+      .filter((exp) => exp.category !== 'سلف الموظفين' && exp.isOperatingExpense !== false && exp.type !== 'employee_advance')
+      .reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  }, [activeExpenses]);
+
+  // 3. Employee Advances Cash Outflows (non-operating cash outflow)
+  const totalAdvancesOutflow = useMemo(() => {
+    return activeExpenses
+      .filter((exp) => exp.category === 'سلف الموظفين' || exp.type === 'employee_advance')
+      .reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  }, [activeExpenses]);
+
+  const totalExpenses = totalCashOutflows;
 
   const totalSalaryExpenses = useMemo(() => {
     return activeExpenses
@@ -474,50 +493,63 @@ export default function Expenses() {
         ) : (
           <>
             {/* Top Summary Cards */}
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-            <Card className="hover:shadow-md transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">إجمالي المصروفات</CardTitle>
-                <Receipt className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-destructive">{totalExpenses.toLocaleString('ar-EG')} ج.م</div>
-                <p className="text-xs text-muted-foreground">للفترة الحالية المحددة</p>
-              </CardContent>
-            </Card>
-          </motion.div>
-          
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>
-            <Card className="hover:shadow-md transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">عدد العمليات</CardTitle>
-                <FileText className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{filteredAndCategorizedExpenses.length}</div>
-                <p className="text-xs text-muted-foreground">عملية إنفاق مسجلة</p>
-              </CardContent>
-            </Card>
-          </motion.div>
+                <Card className="hover:shadow-md transition-shadow">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">إجمالي الخارج من الخزنة</CardTitle>
+                    <Receipt className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-destructive">{totalCashOutflows.toLocaleString('ar-EG')} ج.م</div>
+                    <p className="text-xs text-muted-foreground">التدفقات النقدية الخارجة (تشغيل + سلف)</p>
+                  </CardContent>
+                </Card>
+              </motion.div>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
-            <Card className="hover:shadow-md transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">أعلى تصنيف إنفاقاً</CardTitle>
-                <Target className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {categoryData.length > 0 ? categoryData[0].name : 'لا يوجد'}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {categoryData.length > 0 ? `${categoryData[0].value.toLocaleString('ar-EG')} ج.م` : '-'}
-                </p>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </div>
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}>
+                <Card className="hover:shadow-md transition-shadow">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">مصروفات التشغيل</CardTitle>
+                    <Receipt className="h-4 w-4 text-emerald-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-emerald-400">{operatingExpenses.toLocaleString('ar-EG')} ج.م</div>
+                    <p className="text-xs text-muted-foreground">تُحتسب في الأرباح والخسائر (بدون السلف)</p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>
+                <Card className="hover:shadow-md transition-shadow">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">سلف الموظفين المنصرفة</CardTitle>
+                    <FileText className="h-4 w-4 text-amber-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-amber-400">{totalAdvancesOutflow.toLocaleString('ar-EG')} ج.م</div>
+                    <p className="text-xs text-muted-foreground">أرصدة سلف ذمم مدينة (خارج الخزنة)</p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.15 }}>
+                <Card className="hover:shadow-md transition-shadow">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">أعلى تصنيف إنفاقاً</CardTitle>
+                    <Target className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold truncate">
+                      {categoryData.length > 0 ? categoryData[0].name : 'لا يوجد'}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {categoryData.length > 0 ? `${categoryData[0].value.toLocaleString('ar-EG')} ج.م` : '-'}
+                    </p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </div>
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -650,6 +682,11 @@ export default function Expenses() {
                           <Badge variant="secondary" className="text-[10px]">
                             {expense.category}
                           </Badge>
+                          {(expense.category === 'سلف الموظفين' || expense.type === 'employee_advance') && (
+                            <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/30">
+                              سلفة موظف
+                            </Badge>
+                          )}
                           {isVoided && (
                             <Badge variant="destructive" className="text-[9px] px-1 py-0 h-4">
                               ملغي
@@ -743,6 +780,11 @@ export default function Expenses() {
                               <Badge variant="secondary" className="font-normal bg-opacity-20 border-opacity-20 hover:bg-opacity-30 transition-all">
                                 {expense.category}
                               </Badge>
+                              {(expense.category === 'سلف الموظفين' || expense.type === 'employee_advance') && (
+                                <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-400 border-amber-500/30">
+                                  سلفة موظف
+                                </Badge>
+                              )}
                               {isVoided && (
                                 <Badge variant="destructive" className="text-[9px] px-1 py-0 h-4">
                                   ملغي

@@ -270,7 +270,7 @@ export async function notifySalaryPayment(
     relatedEntityType: 'payroll',
     relatedEntityId: paymentId,
     requiredPermission: 'payroll.view',
-    actionRoute: '/payroll',
+    actionRoute: '/hr?tab=reports',
     deduplicationKey: `salary_pay_${paymentId}`,
     metadata: { employeeName, amount },
   });
@@ -343,7 +343,7 @@ export async function notifyAttendanceCorrection(
     branchId,
     relatedEntityType: 'employee',
     requiredPermission: 'attendance.view',
-    actionRoute: '/attendance',
+    actionRoute: '/hr?tab=attendance',
     deduplicationKey: `att_corr_${employeeName}_${date}`,
     metadata: { employeeName, date },
   });

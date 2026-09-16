@@ -89,6 +89,8 @@ export interface Advance {
   status: AdvanceStatus;
   deductedPeriods: PayrollPeriod[]; // e.g. ['2026-09', '2026-10'] - prevents duplicate installment deduction
   notes?: string;
+  expenseId?: string;
+  expense_id?: string;
   cancelReason?: string;
   cancelledAt?: string;
   cancelledBy?: string;
@@ -119,7 +121,9 @@ export type FinancialAuditAction =
   | 'ADVANCE_DELETED'
   | 'ADVANCE_INSTALLMENT_REVERSED'
   | 'SALARY_PAID'
-  | 'ADVANCE_CREATED';
+  | 'ADVANCE_CREATED'
+  | 'EMPLOYEE_ADVANCE_CREATED'
+  | 'EMPLOYEE_ADVANCE_CANCELLED';
 
 export interface FinancialAuditLog {
   action: FinancialAuditAction;

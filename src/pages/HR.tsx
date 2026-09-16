@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { MainLayout } from '@/components/layout';
 import { useFormatters } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
@@ -108,8 +109,36 @@ export default function HR() {
 
   const { currency, number } = useFormatters();
 
-  // Active Tab
-  const [activeTab, setActiveTab] = useState('employees');
+  const [searchParams] = useSearchParams();
+
+  // Active Tab: initializes from URL search param (e.g. /hr?tab=reports or /hr?tab=payroll)
+  const [activeTab, setActiveTab] = useState(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'reports' || tabParam === 'payroll') return 'reports';
+    if (tabParam === 'attendance') return 'attendance';
+    if (tabParam === 'qr') return 'qr';
+    if (tabParam === 'shifts') return 'shifts';
+    if (tabParam === 'settings') return 'settings';
+    return 'employees';
+  });
+
+  // Sync activeTab if searchParams change dynamically without full page reload
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'reports' || tabParam === 'payroll') {
+      setActiveTab('reports');
+    } else if (tabParam === 'attendance') {
+      setActiveTab('attendance');
+    } else if (tabParam === 'qr') {
+      setActiveTab('qr');
+    } else if (tabParam === 'shifts') {
+      setActiveTab('shifts');
+    } else if (tabParam === 'settings') {
+      setActiveTab('settings');
+    } else if (tabParam === 'employees') {
+      setActiveTab('employees');
+    }
+  }, [searchParams]);
 
   // Search & Filters for Employees
   const [searchQuery, setSearchQuery] = useState('');

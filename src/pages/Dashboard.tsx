@@ -12,6 +12,7 @@ import { KPICard } from '@/components/dashboard';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { useNotificationsStore } from '@/lib/notifications.store';
+import { resolveNotificationRoute } from '@/lib/notificationRoutes';
 
 export default function Dashboard() {
   const { currency, number } = useFormatters();
@@ -66,7 +67,7 @@ export default function Dashboard() {
             {activeAlerts.slice(0, 3).map((alert) => (
               <div
                 key={alert.id}
-                onClick={() => alert.actionRoute && navigate(alert.actionRoute)}
+                onClick={() => navigate(resolveNotificationRoute(alert))}
                 className="p-3 rounded-xl bg-card/80 border border-border/40 hover:border-amber-500/50 transition-all cursor-pointer flex items-start gap-2.5 group shadow-xs"
               >
                 <div className="mt-1 w-2 h-2 rounded-full bg-amber-500 shrink-0" />

@@ -61,6 +61,7 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
   // In-flight locks to prevent double-click race conditions
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
   const [isProcessingCancellation, setIsProcessingCancellation] = useState(false);
+  const [isProcessingAdvance, setIsProcessingAdvance] = useState(false);
 
   const fetchAllPayrollData = useCallback(async () => {
     if (!tenantId) {
@@ -494,7 +495,7 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
   };
 
   /**
-   * Creates a new advance for an employee
+   * Creates a new advance for an employee and records an idempotent cash outflow in expenses
    */
   const createAdvance = async (advanceData: {
     employeeId: string;
@@ -506,19 +507,28 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
     startDate: string;
     paymentMethod: PaymentMethod;
     notes?: string;
-    currentUser?: { name?: string; email?: string };
+    currentUser?: { name?: string; email?: string; uid?: string };
+    idempotencyKey?: string;
   }): Promise<string | null> => {
     if (!tenantId) return null;
+    if (isProcessingAdvance) return null;
 
     try {
+      setIsProcessingAdvance(true);
       const nowIso = new Date().toISOString();
       const amount = Number(advanceData.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        toast.error('قيمة السلفة يجب أن تكون أكبر من الصفر');
+        return null;
+      }
+
       const isInstallments = advanceData.repaymentType === 'installments';
       const numberOfInstallments = isInstallments ? Math.max(1, Number(advanceData.numberOfInstallments) || 1) : 1;
       const installmentAmount = isInstallments
         ? Math.round((amount / numberOfInstallments) * 100) / 100
         : amount;
 
+      // 1. Create advance document in 'advances' collection
       const docRef = await addDoc(
         collection(db, 'advances'),
         sanitizeForFirestore({
@@ -543,28 +553,79 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
         })
       );
 
-      // Audit Log
+      const advanceId = docRef.id;
+      const expenseId = `employee_advance_${advanceId}`;
+
+      // 2. Create linked cash outflow transaction in 'expenses'
+      // Category: 'سلف الموظفين', type: 'employee_advance'
+      // affectsCashFlow: true (money left the cash drawer)
+      // affectsProfitLoss: false (not an operational expense, balance sheet asset)
+      // isOperatingExpense: false (strictly excluded from operating expense totals)
+      await setDoc(
+        doc(db, 'expenses', expenseId),
+        sanitizeForFirestore({
+          id: expenseId,
+          tenantId: tenantId,
+          tenant_id: tenantId,
+          branchId: branchId || '',
+          branch_id: branchId || '',
+          amount,
+          category: 'سلف الموظفين',
+          type: 'employee_advance',
+          description: `سلفة موظف: ${advanceData.employeeName}`,
+          date: advanceData.startDate || nowIso.split('T')[0],
+          paymentMethod: advanceData.paymentMethod || 'cash',
+          employee_id: advanceData.employeeId,
+          employee_name: advanceData.employeeName,
+          advance_id: advanceId,
+          reference_id: expenseId,
+          affectsCashFlow: true,
+          affectsProfitLoss: false,
+          isOperatingExpense: false,
+          status: 'active',
+          createdBy: advanceData.currentUser?.name || advanceData.currentUser?.email || 'المدير',
+          createdAt: nowIso,
+        })
+      );
+
+      // 3. Link expenseId to the advance document
+      await updateDoc(
+        doc(db, 'advances', advanceId),
+        sanitizeForFirestore({
+          expenseId,
+          expense_id: expenseId,
+        })
+      );
+
+      // 4. Record Financial Audit Log
       await addDoc(
         collection(db, 'audit_logs'),
         sanitizeForFirestore({
           tenant_id: tenantId,
-          action: 'advance_created',
-          entity: 'advance',
-          target_id: docRef.id,
+          branch_id: branchId || '',
+          action: 'EMPLOYEE_ADVANCE_CREATED',
+          entityType: 'advance',
+          entityId: advanceId,
+          employeeId: advanceData.employeeId,
+          employeeName: advanceData.employeeName,
+          amount,
+          cashTransactionId: expenseId,
           user: advanceData.currentUser?.name || advanceData.currentUser?.email || 'المدير',
-          details: `إنشاء سلفة جديدة للموظف ${advanceData.employeeName} بمبلغ ${amount} ج.م (${isInstallments ? numberOfInstallments + ' أقساط' : 'خصم كامل'})`,
+          details: `إنشاء سلفة جديدة للموظف ${advanceData.employeeName} بمبلغ ${amount} ج.م وقيد حركة خروج نقدية مرتبطة (${expenseId})`,
           severity: 'info',
           created_at: nowIso,
         })
       );
 
-      toast.success('تم تسجيل السلفة بنجاح');
+      toast.success('تم تسجيل السلفة وتوثيق خروج النقدية بنجاح');
       await fetchAllPayrollData();
-      return docRef.id;
+      return advanceId;
     } catch (err: any) {
       console.error('Error creating advance:', err);
       toast.error('حدث خطأ أثناء إضافة السلفة: ' + err.message);
       return null;
+    } finally {
+      setIsProcessingAdvance(false);
     }
   };
 
@@ -639,24 +700,43 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
         }
       }
 
+      // Void linked cash outflow transaction in 'expenses'
+      const expenseId = adv.expenseId || adv.expense_id || `employee_advance_${advanceId}`;
+      try {
+        await updateDoc(
+          doc(db, 'expenses', expenseId),
+          sanitizeForFirestore({
+            status: 'voided',
+            voidReason: `إلغاء السلفة: ${reason.trim()}`,
+            voidedAt: nowIso,
+            voidedBy: performedByName,
+            affectsCashFlow: false,
+            updatedAt: nowIso,
+          })
+        );
+      } catch (e) {
+        console.warn('Could not void linked advance expense:', expenseId, e);
+      }
+
       // Audit Log
       await addDoc(
         collection(db, 'audit_logs'),
         sanitizeForFirestore({
           tenant_id: tenantId,
           branch_id: adv.branch_id || branchId || '',
-          action: 'ADVANCE_CANCELLED',
+          action: 'EMPLOYEE_ADVANCE_CANCELLED',
           entityType: 'advance',
           entityId: advanceId,
           employeeId: adv.employeeId,
           employeeName: adv.employeeName,
           amount: adv.amount,
+          cashTransactionId: expenseId,
           reason: reason.trim(),
           performedBy: performedByName,
           performedAt: nowIso,
           previousStatus: adv.status,
           newStatus: 'cancelled',
-          details: `إلغاء سلفة للموظف ${adv.employeeName} بمبلغ ${adv.amount} ج.م (المسدد منها: ${adv.paidAmount} ج.م). السبب: ${reason}`,
+          details: `إلغاء سلفة للموظف ${adv.employeeName} بمبلغ ${adv.amount} ج.م وإلغاء حركة النقدية المرتبطة (${expenseId}). السبب: ${reason}`,
           severity: 'warning',
           created_at: nowIso,
         })
@@ -756,6 +836,24 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
         } catch (e) {
           console.warn('Could not delete installment:', inst.id, e);
         }
+      }
+
+      // Void linked cash outflow transaction in 'expenses' to prevent phantom cash outflows
+      const expenseId = adv.expenseId || adv.expense_id || `employee_advance_${advanceId}`;
+      try {
+        await updateDoc(
+          doc(db, 'expenses', expenseId),
+          sanitizeForFirestore({
+            status: 'voided',
+            voidReason: `حذف السلفة: ${reason.trim()}`,
+            voidedAt: nowIso,
+            voidedBy: performedByName,
+            affectsCashFlow: false,
+            updatedAt: nowIso,
+          })
+        );
+      } catch (e) {
+        console.warn('Could not void linked advance expense on deletion:', expenseId, e);
       }
 
       // 3. Delete the advance document
@@ -966,6 +1064,7 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
     loading,
     isSubmittingPayment,
     isProcessingCancellation,
+    isProcessingAdvance,
     fetchAllPayrollData,
     getPayrollForPeriod,
     disburseSalaryPayment,

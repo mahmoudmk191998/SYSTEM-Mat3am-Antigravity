@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotificationsStore } from '@/lib/notifications.store';
 import type { AppNotification } from '@/types/notifications.types';
+import { resolveNotificationRoute } from '@/lib/notificationRoutes';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserPermissions } from '@/hooks/usePermissions';
 import { useTenantBranch } from '@/hooks/useDatabase';
@@ -110,22 +111,28 @@ export function NotificationBell() {
   };
 
   const handleActionClick = (notif: AppNotification) => {
-    if (user?.uid) {
-      markAsRead(notif.id, user.uid);
-    }
-
-    if (!notif.actionRoute) return;
-
-    // Security Re-check: ensure user still has permission before navigating
-    if (notif.requiredPermission && !isAdmin && !isOwner) {
-      if (!hasPermission(notif.requiredPermission)) {
-        toast.error('ليس لديك الصلاحية المطلوبة للوصول لهذا الإجراء');
-        return;
+    try {
+      if (user?.uid) {
+        markAsRead(notif.id, user.uid);
       }
-    }
 
-    setOpen(false);
-    navigate(notif.actionRoute);
+      // Security Re-check: ensure user still has permission before navigating
+      if (notif.requiredPermission && !isAdmin && !isOwner) {
+        if (!hasPermission(notif.requiredPermission)) {
+          toast.error('ليس لديك الصلاحية المطلوبة للوصول لهذا الإجراء');
+          return;
+        }
+      }
+
+      const targetRoute = resolveNotificationRoute(notif);
+      setOpen(false);
+      navigate(targetRoute);
+    } catch (err) {
+      console.error('Failed to navigate to notification action route:', err);
+      toast.error('تعذر فتح الصفحة المرتبطة بهذا الإشعار');
+      setOpen(false);
+      navigate('/');
+    }
   };
 
   const handleMarkAllRead = () => {

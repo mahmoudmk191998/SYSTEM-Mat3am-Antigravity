@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout';
 import { useNotificationsStore } from '@/lib/notifications.store';
 import type { AppNotification, NotificationCategory } from '@/types/notifications.types';
+import { resolveNotificationRoute } from '@/lib/notificationRoutes';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserPermissions } from '@/hooks/usePermissions';
 import {
@@ -104,20 +105,25 @@ export default function NotificationsHistory() {
   }, [filteredNotifications, currentPage]);
 
   const handleActionClick = (notif: AppNotification) => {
-    if (user?.uid) {
-      markAsRead(notif.id, user.uid);
-    }
-
-    if (!notif.actionRoute) return;
-
-    if (notif.requiredPermission && !isAdmin && !isOwner) {
-      if (!hasPermission(notif.requiredPermission)) {
-        toast.error('ليس لديك الصلاحية المطلوبة للوصول لهذا الإجراء');
-        return;
+    try {
+      if (user?.uid) {
+        markAsRead(notif.id, user.uid);
       }
-    }
 
-    navigate(notif.actionRoute);
+      if (notif.requiredPermission && !isAdmin && !isOwner) {
+        if (!hasPermission(notif.requiredPermission)) {
+          toast.error('ليس لديك الصلاحية المطلوبة للوصول لهذا الإجراء');
+          return;
+        }
+      }
+
+      const targetRoute = resolveNotificationRoute(notif);
+      navigate(targetRoute);
+    } catch (err) {
+      console.error('Failed to navigate to notification route:', err);
+      toast.error('تعذر فتح الصفحة المرتبطة بهذا الإشعار');
+      navigate('/');
+    }
   };
 
   const getCategoryIcon = (category: string, type: string) => {
