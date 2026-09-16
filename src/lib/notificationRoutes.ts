@@ -54,6 +54,7 @@ export const VALID_ROUTE_PREFIXES = [
   '/callcenter',
   '/notifications',
   '/executive',
+  '/backup',
   // Redirect routes:
   '/payroll',
   '/advances',

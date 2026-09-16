@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, ShoppingCart, ChefHat, CalendarDays, UtensilsCrossed,
   Package, Truck, Factory, Bike, Users, Percent, UserCog, BarChart3,
-  Settings, FileText, Puzzle, BookOpen, ChevronRight, Building2, Menu, Shield, Receipt, ChevronDown, Clock, Gift, Wrench, Calculator, PhoneCall, Trash2, Eye, EyeOff, TrendingUp
+  Settings, FileText, Puzzle, BookOpen, ChevronRight, Building2, Menu, Shield, Receipt, ChevronDown, Clock, Gift, Wrench, Calculator, PhoneCall, Trash2, Eye, EyeOff, TrendingUp, Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -73,6 +73,7 @@ const navGroups = [
     title: 'النظام والإعدادات',
     items: [
       { path: '/settings', label: 'الإعدادات', icon: Settings, perms: ['settings.view'] },
+      { path: '/backup', label: 'النسخ الاحتياطي والتعافي', icon: Database, perms: ['backup.view', 'settings.manage'] },
       { path: '/permissions', label: 'الصلاحيات', icon: Shield, perms: ['permissions.manage'] },
       { path: '/maintenance', label: 'الأصول والصيانة', icon: Wrench, perms: ['maintenance.view'] },
       { path: '/integrations', label: 'مركز التكاملات', icon: Puzzle, perms: ['integrations.view'] },

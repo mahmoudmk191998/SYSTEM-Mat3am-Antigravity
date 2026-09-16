@@ -47,6 +47,7 @@ const CallCenter = lazy(() => import("./pages/CallCenter"));
 const AttendancePublic = lazy(() => import("./pages/AttendancePublic"));
 const NotificationsHistory = lazy(() => import("./pages/NotificationsHistory"));
 const ExecutiveDashboard = lazy(() => import("./pages/ExecutiveDashboard"));
+const Backup = lazy(() => import("./pages/Backup"));
 
 const queryClient = new QueryClient();
 
@@ -156,6 +157,7 @@ function AppRoutes() {
         <Route path="/maintenance" element={<ProtectedRoute requiredPerms={['maintenance.view']}><Maintenance /></ProtectedRoute>} />
         <Route path="/accounting" element={<ProtectedRoute requiredPerms={['accounting.view']}><Accounting /></ProtectedRoute>} />
         <Route path="/executive" element={<ProtectedRoute requiredPerms={['financial_dashboard.view', 'reports.view', 'accounting.view']}><ExecutiveDashboard /></ProtectedRoute>} />
+        <Route path="/backup" element={<ProtectedRoute requiredPerms={['backup.view', 'settings.manage']}><Backup /></ProtectedRoute>} />
         <Route path="/callcenter" element={<ProtectedRoute requiredPerms={['callcenter.view']}><CallCenter /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><NotificationsHistory /></ProtectedRoute>} />
         <Route path="/payroll" element={<Navigate to="/hr?tab=reports" replace />} />

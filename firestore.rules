@@ -331,6 +331,23 @@ service cloud.firestore {
       );
     }
 
+    // =========================================================================
+    // Backup & Disaster Recovery Subsystem
+    // Access is strictly restricted to Sovereign Owners and System Admins
+    // =========================================================================
+    match /backups/{backupId} {
+      allow read, write: if isAuthenticated() && (
+        request.auth.token.role in ['owner', 'admin'] ||
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ['owner', 'admin']
+      );
+    }
+    match /restore_jobs/{jobId} {
+      allow read, write: if isAuthenticated() && (
+        request.auth.token.role in ['owner', 'admin'] ||
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ['owner', 'admin']
+      );
+    }
+
     // Default catch-all: reject unauthenticated access to any unspecified document
     match /{document=**} {
       allow read, write: if isAuthenticated();

@@ -137,6 +137,18 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       { id: 'audit.view', label: 'استعراض سجل التدقيق الأمني للعمليات' },
     ],
   },
+  {
+    id: 'backup',
+    label: 'النسخ الاحتياطي والتعافي من الكوارث',
+    iconName: 'Database',
+    permissions: [
+      { id: 'backup.view', label: 'استعراض سجل وحالة النسخ الاحتياطية' },
+      { id: 'backup.create', label: 'إنشاء نسخة احتياطية جديدة (شاملة / موديول)' },
+      { id: 'backup.download', label: 'تنزيل ملف النسخة الاحتياطية' },
+      { id: 'backup.restore', label: 'تنفيذ استعادة البيانات (صلاحية حساسة للمالك والمدير)' },
+      { id: 'backup.delete', label: 'حذف ملفات النسخ الاحتياطية القديمة' },
+    ],
+  },
 ];
 
 export const ALL_PERMISSION_IDS: string[] = PERMISSION_CATEGORIES.flatMap(c => c.permissions.map(p => p.id));
