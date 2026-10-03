@@ -101,6 +101,7 @@ export default function HR() {
     isProcessingCancellation,
     getPayrollForPeriod,
     disburseSalaryPayment,
+    settlePayrollCycle,
     voidSalaryPayment,
     createAdvance,
     cancelAdvance,
@@ -1732,6 +1733,7 @@ export default function HR() {
             onActivatePayrollPeriod={handleActivatePayrollPeriod}
             onUpdateSalarySchedule={handleUpdateSalarySchedule}
             onDisbursePayment={disburseSalaryPayment}
+            onSettlePayroll={async (payroll) => settlePayrollCycle(payroll, user)}
             onVoidPayment={voidSalaryPayment}
             onCreateAdvance={createAdvance}
             onDeleteAdvance={deleteAdvance}
@@ -2263,6 +2265,8 @@ export default function HR() {
                     onDeleteAdvance={deleteAdvance}
                     onVoidPayment={voidSalaryPayment}
                     onReverseInstallment={reverseAdvanceInstallment}
+                    salaryDueDay={hrSettings.salary_due_day ?? 28}
+                    salaryDueTiming={hrSettings.salary_due_timing ?? 'same_month'}
                     isProcessing={isProcessingCancellation}
                   />
                 </TabsContent>
