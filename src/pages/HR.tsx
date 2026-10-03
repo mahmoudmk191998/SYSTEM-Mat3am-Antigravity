@@ -260,6 +260,7 @@ export default function HR() {
     role: '',
     department: '',
     salary: '',
+    salary_due_day: '',
     employee_type: 'full_time',
     status: 'active',
     pin: '',
@@ -435,6 +436,7 @@ export default function HR() {
       role: newEmployee.role,
       department: newEmployee.department,
       salary: Number(newEmployee.salary) || 0,
+      salary_due_day: newEmployee.salary_due_day ? Number(newEmployee.salary_due_day) : null,
       employee_type: newEmployee.employee_type,
       status: newEmployee.status,
       default_shift_id: newEmployee.shift_id || null,
@@ -450,6 +452,7 @@ export default function HR() {
         role: '',
         department: '',
         salary: '',
+        salary_due_day: '',
         employee_type: 'full_time',
         status: 'active',
         pin: '',
@@ -467,6 +470,7 @@ export default function HR() {
       role: editingEmployee.role,
       department: editingEmployee.department,
       salary: Number(editingEmployee.salary) || 0,
+      salary_due_day: editingEmployee.salary_due_day ? Number(editingEmployee.salary_due_day) : null,
       employee_type: editingEmployee.employeeType || editingEmployee.employee_type,
       status: editingEmployee.status,
       default_shift_id: editingEmployee.shiftId || editingEmployee.default_shift_id || null,
@@ -1975,6 +1979,21 @@ export default function HR() {
                 />
               </div>
             </div>
+
+            <div className="p-3 rounded-xl border border-primary/20 bg-primary/5 space-y-1.5">
+              <Label className="text-xs font-bold">يوم صرف راتب الموظف (اختياري)</Label>
+              <Input
+                type="number"
+                min={1}
+                max={31}
+                placeholder={String(hrSettings.salary_due_day ?? 28)}
+                value={newEmployee.salary_due_day}
+                onChange={(e) => setNewEmployee({ ...newEmployee, salary_due_day: e.target.value })}
+              />
+              <p className="text-[10px] text-muted-foreground">
+                اتركه فارغًا لاستخدام موعد الرواتب العام. إذا حددته، تصبح دورة الموظف من اليوم التالي لموعد راتبه السابق حتى موعد راتبه الحالي.
+              </p>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">الوردية الافتراضية</Label>
@@ -2087,6 +2106,21 @@ export default function HR() {
                     onChange={(e) => setEditingEmployee({ ...editingEmployee, salary: e.target.value })}
                   />
                 </div>
+              </div>
+
+              <div className="p-3 rounded-xl border border-primary/20 bg-primary/5 space-y-1.5">
+                <Label className="text-xs font-bold">يوم صرف الراتب الشهري</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={31}
+                  placeholder={String(hrSettings.salary_due_day ?? 28)}
+                  value={editingEmployee.salary_due_day ?? ''}
+                  onChange={(e) => setEditingEmployee({ ...editingEmployee, salary_due_day: e.target.value })}
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  فارغ = الموعد العام ({hrSettings.salary_due_day ?? 28}). يوم مخصص = دورة راتب مستقلة لهذا الموظف.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
