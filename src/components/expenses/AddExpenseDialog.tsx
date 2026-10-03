@@ -26,7 +26,7 @@ import { usePayroll } from '@/hooks/usePayroll';
 import type { ExpenseCategory } from '@/types/expenses';
 import type { PaymentMethod } from '@/types/payroll';
 import { DollarSign, UserCheck, AlertCircle, ArrowUpRight } from 'lucide-react';
-import { getEmployeeAutoPayrollPeriod, getPayrollPeriodLabel } from '@/lib/payrollPeriods';
+import { getPayrollPeriodLabel } from '@/lib/payrollPeriods';
 
 interface AddExpenseDialogProps {
   open: boolean;
