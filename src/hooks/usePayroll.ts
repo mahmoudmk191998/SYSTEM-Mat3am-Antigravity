@@ -416,37 +416,42 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
       let settledAdvanceAmount = 0;
 
       for (const adv of employeeAdvances) {
-        const installment = calculateAdvanceDueInstallment(adv, payroll.period);
-        if (installment <= 0) continue;
+        // Always re-read the live advance before mutating it. This makes retries
+        // safe after network interruption or a partially completed settlement.
+        const liveSnap = await getDoc(doc(db, 'advances', adv.id));
+        if (!liveSnap.exists()) continue;
+        const liveAdvance = { id: adv.id, ...(liveSnap.data() as any) } as Advance;
 
-        const existingInstallment = advanceInstallments.find(
-          (i) =>
-            i.advanceId === adv.id &&
-            i.employeeId === payroll.employeeId &&
-            i.period === payroll.period &&
-            i.status === 'paid'
-        );
-
-        if (!existingInstallment) {
-          await addDoc(
-            collection(db, 'advance_installments'),
-            sanitizeForFirestore({
-              tenant_id: tenantId,
-              advanceId: adv.id,
-              employeeId: payroll.employeeId,
-              payrollId: payroll.id,
-              period: payroll.period,
-              amount: installment,
-              status: 'paid',
-              paidAt: nowIso,
-              createdAt: nowIso,
-            })
-          );
+        if (liveAdvance.deductedPeriods?.includes(payroll.period)) {
+          continue;
         }
 
-        const updatedAdv = applyAdvanceDeduction(adv, payroll.period, installment);
+        const installment = calculateAdvanceDueInstallment(liveAdvance, payroll.period);
+        if (installment <= 0) continue;
+
+        const deterministicInstallmentId =
+          'settlement_' + liveAdvance.id + '_' + payroll.period.replace('-', '_');
+
+        await setDoc(
+          doc(db, 'advance_installments', deterministicInstallmentId),
+          sanitizeForFirestore({
+            tenant_id: tenantId,
+            advanceId: liveAdvance.id,
+            employeeId: payroll.employeeId,
+            payrollId: payroll.id,
+            period: payroll.period,
+            amount: installment,
+            status: 'paid',
+            paidAt: nowIso,
+            createdAt: nowIso,
+            source: 'payroll_cycle_settlement',
+          }),
+          { merge: true }
+        );
+
+        const updatedAdv = applyAdvanceDeduction(liveAdvance, payroll.period, installment);
         await updateDoc(
-          doc(db, 'advances', adv.id),
+          doc(db, 'advances', liveAdvance.id),
           sanitizeForFirestore({
             paidAmount: updatedAdv.paidAmount,
             remainingAmount: updatedAdv.remainingAmount,
@@ -652,6 +657,11 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
             totalPaid: newTotalPaid,
             remaining: newRemaining,
             status: newStatus,
+            settledAt: newRemaining > 0 ? null : payroll.settledAt || null,
+            settledBy: newRemaining > 0 ? null : payroll.settledBy || null,
+            settlementSource: newRemaining > 0 ? null : payroll.settlementSource || null,
+            settledAdvanceAmount: newRemaining > 0 ? null : payroll.settledAdvanceAmount || null,
+            settlementStatus: newRemaining > 0 ? null : payroll.settlementStatus || null,
             updatedAt: nowIso,
           })
         );
