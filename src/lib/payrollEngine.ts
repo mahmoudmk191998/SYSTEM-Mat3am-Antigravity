@@ -6,6 +6,7 @@ import type {
   AdvanceInstallment,
   SalaryPayment,
   AttendanceSummary,
+  PayrollCycleKind,
 } from '@/types/payroll';
 import type { EmployeeLeave } from '@/types/leave';
 import { isAdvanceEligibleForPeriod } from '@/lib/payrollPeriods';
@@ -54,6 +55,10 @@ export interface PayrollCalculationOptions {
     reason?: string;
   };
   approvedLeaves?: EmployeeLeave[];
+  periodStart?: string;
+  periodEnd?: string;
+  salaryDueDate?: string;
+  cycleKind?: PayrollCycleKind;
 }
 
 /**
@@ -71,6 +76,10 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
     hrSettings,
     manualAdditions,
     manualDeductions,
+    periodStart,
+    periodEnd,
+    salaryDueDate,
+    cycleKind,
   } = options;
 
   const [yearStr, monthStr] = period.split('-');
@@ -85,10 +94,21 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
   const dailyRate = baseSalary > 0 ? baseSalary / 30 : 0;
   const hourlyRate = dailyRate / 8;
 
-  // 2. Attendance & Approved Leaves Metrics for the period
+  // 2. Attendance & Approved Leaves Metrics for the period.
+  // Legacy employees keep the original calendar-month behavior. Employees with
+  // a custom payday can supply a precise payroll cycle range.
+  const hasCustomRange = Boolean(periodStart && periodEnd);
+  const dateBelongsToCycle = (date?: string) => {
+    if (!date) return false;
+    if (hasCustomRange) {
+      return date >= (periodStart as string) && date <= (periodEnd as string);
+    }
+    return date.startsWith(period);
+  };
+
   const empAttendance = attendanceRecords.filter((a) => {
     const empId = a.employeeId || a.employee_id;
-    return empId === employee.id && a.date && a.date.startsWith(period);
+    return empId === employee.id && dateBelongsToCycle(a.date);
   });
 
   const empApprovedLeaves = (options.approvedLeaves || []).filter((l) => {
@@ -107,7 +127,7 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
     let curr = new Date(start);
     while (curr <= end) {
       const dStr = curr.toISOString().split('T')[0];
-      if (dStr.startsWith(period)) {
+      if (dateBelongsToCycle(dStr)) {
         approvedLeaveDates.add(dStr);
         if (!l.is_paid) {
           approvedUnpaidDates.add(dStr);
@@ -304,6 +324,10 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
     employeeName: employee.name,
     employeeRole: employee.role || '',
     period,
+    periodStart: periodStart || period + '-01',
+    periodEnd,
+    salaryDueDate,
+    cycleKind,
     year,
     month,
     basicSalarySnapshot: baseSalary,
