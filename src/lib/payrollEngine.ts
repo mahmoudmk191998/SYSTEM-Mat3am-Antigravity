@@ -264,12 +264,19 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
       cycleKey && adv.deductedCycleKeys?.includes(cycleKey)
     );
     const legacyPeriodAlreadyDeducted = Boolean(
-      !cycleKey && adv.deductedPeriods?.includes(period)
+      adv.deductedPeriods?.includes(period)
     );
 
-    if (exactCycleAlreadyDeducted || legacyPeriodAlreadyDeducted) {
-      // Preserve locked historical deductions only when they belong to this
-      // exact cycle. A legacy month marker must never leak into a new cycle.
+    if (exactCycleAlreadyDeducted) {
+      const lockedAmount = adv.repaymentType === 'next_salary'
+        ? adv.amount
+        : Math.min(adv.amount, adv.installmentAmount || adv.amount);
+      advanceDeductions += lockedAmount;
+    } else if (cycleKey && legacyPeriodAlreadyDeducted) {
+      // The month was already processed before cycleKey existed. Do not show
+      // the old installment in this new cycle and do not charge it twice.
+      continue;
+    } else if (!cycleKey && legacyPeriodAlreadyDeducted) {
       const lockedAmount = adv.repaymentType === 'next_salary'
         ? adv.amount
         : Math.min(adv.amount, adv.installmentAmount || adv.amount);
@@ -395,6 +402,15 @@ export function calculateAdvanceDueInstallment(
   }
   if (cycleKey) {
     if (advance.deductedCycleKeys?.includes(cycleKey)) {
+      return 0;
+    }
+
+    // If this month was already deducted before cycleKey existed, wait for the
+    // next payroll month instead of charging another installment in the same month.
+    if (
+      (!advance.deductedCycleKeys || advance.deductedCycleKeys.length === 0) &&
+      advance.deductedPeriods?.includes(period)
+    ) {
       return 0;
     }
   } else if (advance.deductedPeriods && advance.deductedPeriods.includes(period)) {
