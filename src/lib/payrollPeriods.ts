@@ -165,19 +165,24 @@ export function getEmployeeAutoPayrollPeriod(
   referenceDate: Date = new Date()
 ): PayrollPeriod {
   const customDay = getEmployeeCustomSalaryDay(employee);
-  if (customDay === null) {
-    return getLatestDuePayrollPeriod(referenceDate, globalDueDay, globalDueTiming);
-  }
-
   const currentPeriod = getCurrentPayrollPeriod(referenceDate);
   const today = referenceDate.getFullYear() + '-' +
     String(referenceDate.getMonth() + 1).padStart(2, '0') + '-' +
     String(referenceDate.getDate()).padStart(2, '0');
+
+  if (customDay === null) {
+    // Calendar-month employees stay on the current business month. The due date
+    // controls when payment is expected, not which month their work belongs to.
+    return currentPeriod;
+  }
+
   const currentCycle = getEmployeePayrollCycle(currentPeriod, employee, globalDueDay, globalDueTiming);
 
-  return today >= currentCycle.dueDate
-    ? currentPeriod
-    : getPreviousPayrollPeriod(currentPeriod);
+  // For custom-payday employees, once this month's due date passes, the next
+  // salary cycle starts immediately on the following day.
+  return today > currentCycle.dueDate
+    ? getNextPayrollPeriod(currentPeriod)
+    : currentPeriod;
 }
 
 export function getNextEmployeePayrollCycle(
