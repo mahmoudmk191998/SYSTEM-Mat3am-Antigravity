@@ -36,6 +36,8 @@ import { toast } from 'sonner';
 import {
   getCurrentPayrollPeriod,
   getEmployeePayrollCycle,
+  payrollRecordMatchesCycle,
+  resolveEmployeeTargetPayrollPeriod,
   isValidPayrollPeriod,
 } from '@/lib/payrollPeriods';
 
@@ -120,16 +122,19 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
       leaves?: any[]
     ): PayrollRecord[] => {
       return employees.map((emp) => {
-        // Find existing stored payroll snapshot if any
-        const existing = payrolls.find(
-          (p) => p.employeeId === emp.id && p.period === period
-        );
-
         const cycle = getEmployeePayrollCycle(
           period,
           emp,
           hrSettings?.salary_due_day ?? 28,
           hrSettings?.salary_due_timing ?? 'same_month'
+        );
+
+        // Critical legacy compatibility: a pre-cycle payroll with only YYYY-MM
+        // must not become the snapshot for a new custom-payday cycle.
+        const existing = payrolls.find(
+          (p) =>
+            p.employeeId === emp.id &&
+            payrollRecordMatchesCycle(p, cycle)
         );
 
         return calculateEmployeePayroll({
@@ -145,10 +150,28 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
           periodEnd: cycle.periodEnd,
           salaryDueDate: cycle.dueDate,
           cycleKind: cycle.cycleKind,
+          cycleKey: cycle.cycleKey,
         });
       });
     },
     [payrolls, advances, salaryPayments]
+  );
+
+  const resolveEmployeePayrollPeriod = useCallback(
+    (
+      employee: EmployeeData,
+      hrSettings?: any,
+      referenceDate: Date = new Date()
+    ): PayrollPeriod => {
+      return resolveEmployeeTargetPayrollPeriod(
+        employee,
+        hrSettings?.active_payroll_period,
+        hrSettings?.salary_due_day ?? 28,
+        hrSettings?.salary_due_timing ?? 'same_month',
+        referenceDate
+      );
+    },
+    []
   );
 
   /**
@@ -191,7 +214,8 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
     try {
       const nowIso = new Date().toISOString();
       const todayStr = nowIso.split('T')[0];
-      const idempotencyKey = `pay_${payroll.employeeId}_${payroll.period}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const paymentCycleToken = payroll.cycleKey || payroll.period;
+      const idempotencyKey = `pay_${payroll.employeeId}_${paymentCycleToken}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
       // 1. Double check idempotency against existing payments
       const existingPayQuery = query(
@@ -216,6 +240,7 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
           employeeId: payroll.employeeId,
           employeeName: payroll.employeeName,
           payrollPeriod: payroll.period,
+          payrollCycleKey: payroll.cycleKey || '',
           amount: Number(amount),
           paymentMethod,
           referenceNumber: referenceNumber?.trim() || '',
@@ -243,6 +268,7 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
           payment_id: paymentId,
           reference_id: `salary_payment_${paymentId}`,
           payroll_period: payroll.period,
+          payroll_cycle_key: payroll.cycleKey || '',
           employee_id: payroll.employeeId,
           createdBy: currentUser?.uid || 'المدير',
           createdAt: nowIso,
@@ -280,39 +306,63 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
       );
 
       for (const adv of empAdvances) {
-        if (!adv.deductedPeriods || !adv.deductedPeriods.includes(payroll.period)) {
-          const installment = calculateAdvanceDueInstallment(adv, payroll.period);
-          if (installment > 0) {
-            // Create Advance Installment Document
-            await addDoc(
-              collection(db, 'advance_installments'),
-              sanitizeForFirestore({
-                tenant_id: tenantId,
-                advanceId: adv.id,
-                employeeId: payroll.employeeId,
-                payrollId: payroll.id,
-                period: payroll.period,
-                amount: installment,
-                status: 'paid',
-                paidAt: nowIso,
-                createdAt: nowIso,
-              })
-            );
+        const liveSnap = await getDoc(doc(db, 'advances', adv.id));
+        if (!liveSnap.exists()) continue;
+        const liveAdvance = { id: adv.id, ...(liveSnap.data() as any) } as Advance;
 
-            // Update Advance document
-            const updatedAdv = applyAdvanceDeduction(adv, payroll.period, installment);
-            await updateDoc(
-              doc(db, 'advances', adv.id),
-              sanitizeForFirestore({
-                paidAmount: updatedAdv.paidAmount,
-                remainingAmount: updatedAdv.remainingAmount,
-                remainingInstallments: updatedAdv.remainingInstallments,
-                status: updatedAdv.status,
-                deductedPeriods: updatedAdv.deductedPeriods,
-                updatedAt: nowIso,
-              })
-            );
-          }
+        const alreadySealed = payroll.cycleKey
+          ? liveAdvance.deductedCycleKeys?.includes(payroll.cycleKey)
+          : liveAdvance.deductedPeriods?.includes(payroll.period);
+
+        if (alreadySealed) continue;
+
+        const installment = calculateAdvanceDueInstallment(
+          liveAdvance,
+          payroll.period,
+          payroll.cycleKey
+        );
+
+        if (installment > 0) {
+          const cycleToken = payroll.cycleKey || payroll.period.replace('-', '_');
+          const installmentId = 'salary_' + liveAdvance.id + '_' + cycleToken;
+
+          await setDoc(
+            doc(db, 'advance_installments', installmentId),
+            sanitizeForFirestore({
+              tenant_id: tenantId,
+              advanceId: liveAdvance.id,
+              employeeId: payroll.employeeId,
+              payrollId: payroll.id,
+              period: payroll.period,
+              cycleKey: payroll.cycleKey || '',
+              amount: installment,
+              status: 'paid',
+              paidAt: nowIso,
+              createdAt: nowIso,
+              source: 'salary_payment',
+            }),
+            { merge: true }
+          );
+
+          const updatedAdv = applyAdvanceDeduction(
+            liveAdvance,
+            payroll.period,
+            installment,
+            payroll.cycleKey
+          );
+
+          await updateDoc(
+            doc(db, 'advances', liveAdvance.id),
+            sanitizeForFirestore({
+              paidAmount: updatedAdv.paidAmount,
+              remainingAmount: updatedAdv.remainingAmount,
+              remainingInstallments: updatedAdv.remainingInstallments,
+              status: updatedAdv.status,
+              deductedPeriods: updatedAdv.deductedPeriods,
+              deductedCycleKeys: updatedAdv.deductedCycleKeys || [],
+              updatedAt: nowIso,
+            })
+          );
         }
       }
 
@@ -410,7 +460,11 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
             (a) =>
               a.employeeId === payroll.employeeId &&
               a.status !== 'cancelled' &&
-              (!a.deductedPeriods || !a.deductedPeriods.includes(payroll.period))
+              (
+                payroll.cycleKey
+                  ? !a.deductedCycleKeys?.includes(payroll.cycleKey)
+                  : (!a.deductedPeriods || !a.deductedPeriods.includes(payroll.period))
+              )
           );
 
       let settledAdvanceAmount = 0;
@@ -422,15 +476,24 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
         if (!liveSnap.exists()) continue;
         const liveAdvance = { id: adv.id, ...(liveSnap.data() as any) } as Advance;
 
-        if (liveAdvance.deductedPeriods?.includes(payroll.period)) {
+        if (
+          payroll.cycleKey
+            ? liveAdvance.deductedCycleKeys?.includes(payroll.cycleKey)
+            : liveAdvance.deductedPeriods?.includes(payroll.period)
+        ) {
           continue;
         }
 
-        const installment = calculateAdvanceDueInstallment(liveAdvance, payroll.period);
+        const installment = calculateAdvanceDueInstallment(
+          liveAdvance,
+          payroll.period,
+          payroll.cycleKey
+        );
         if (installment <= 0) continue;
 
+        const settlementCycleToken = payroll.cycleKey || payroll.period.replace('-', '_');
         const deterministicInstallmentId =
-          'settlement_' + liveAdvance.id + '_' + payroll.period.replace('-', '_');
+          'settlement_' + liveAdvance.id + '_' + settlementCycleToken;
 
         await setDoc(
           doc(db, 'advance_installments', deterministicInstallmentId),
@@ -440,6 +503,7 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
             employeeId: payroll.employeeId,
             payrollId: payroll.id,
             period: payroll.period,
+            cycleKey: payroll.cycleKey || '',
             amount: installment,
             status: 'paid',
             paidAt: nowIso,
@@ -449,7 +513,12 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
           { merge: true }
         );
 
-        const updatedAdv = applyAdvanceDeduction(liveAdvance, payroll.period, installment);
+        const updatedAdv = applyAdvanceDeduction(
+          liveAdvance,
+          payroll.period,
+          installment,
+          payroll.cycleKey
+        );
         await updateDoc(
           doc(db, 'advances', liveAdvance.id),
           sanitizeForFirestore({
@@ -458,6 +527,7 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
             remainingInstallments: updatedAdv.remainingInstallments,
             status: updatedAdv.status,
             deductedPeriods: updatedAdv.deductedPeriods,
+            deductedCycleKeys: updatedAdv.deductedCycleKeys || [],
             updatedAt: nowIso,
           })
         );
@@ -1165,9 +1235,12 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
         advance.repaymentType === 'installments'
           ? (advance.remainingInstallments || 0) + 1
           : 1;
-      const restoredDeductedPeriods = (advance.deductedPeriods || []).filter(
-        (p) => p !== installment.period
-      );
+      const restoredDeductedPeriods = installment.cycleKey
+        ? (advance.deductedPeriods || [])
+        : (advance.deductedPeriods || []).filter((p) => p !== installment.period);
+      const restoredDeductedCycleKeys = installment.cycleKey
+        ? (advance.deductedCycleKeys || []).filter((key) => key !== installment.cycleKey)
+        : (advance.deductedCycleKeys || []);
       const restoredStatus = restoredPaidAmount > 0 ? 'partially_paid' : 'active';
 
       await updateDoc(
@@ -1177,6 +1250,7 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
           remainingAmount: restoredRemainingAmount,
           remainingInstallments: restoredRemainingInstallments,
           deductedPeriods: restoredDeductedPeriods,
+          deductedCycleKeys: restoredDeductedCycleKeys,
           status: restoredStatus,
           updatedAt: nowIso,
         })
@@ -1285,6 +1359,7 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
     isProcessingAdvance,
     fetchAllPayrollData,
     getPayrollForPeriod,
+    resolveEmployeePayrollPeriod,
     disburseSalaryPayment,
     settlePayrollCycle,
     voidSalaryPayment,

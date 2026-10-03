@@ -17,6 +17,7 @@ export interface EmployeePayrollCycle {
   dueTiming: SalaryDueTiming;
   cycleKind: PayrollCycleKind;
   usesEmployeeCustomDay: boolean;
+  cycleKey?: string;
 }
 
 export function isValidPayrollPeriod(value: unknown): value is PayrollPeriod {
@@ -97,6 +98,17 @@ export function getEmployeeCustomSalaryDay(employee: any): number | null {
   return Math.trunc(numeric);
 }
 
+export function getPayrollCycleKey(
+  employeeId: string,
+  periodStart: string,
+  periodEnd: string
+): string {
+  const safeEmployee = String(employeeId || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const safeStart = periodStart.replace(/-/g, '_');
+  const safeEnd = periodEnd.replace(/-/g, '_');
+  return `${safeEmployee}_${safeStart}_${safeEnd}`;
+}
+
 export function getEmployeePayrollCycle(
   period: PayrollPeriod,
   employee: any,
@@ -111,28 +123,36 @@ export function getEmployeePayrollCycle(
     const previousDueDate = getDateForPeriodDay(previousPeriod, customDay);
     const dueDate = getDateForPeriodDay(safePeriod, customDay);
 
+    const periodStart = addDays(previousDueDate, 1);
+    const periodEnd = dueDate;
+
     return {
       period: safePeriod,
-      periodStart: addDays(previousDueDate, 1),
-      periodEnd: dueDate,
+      periodStart,
+      periodEnd,
       dueDate,
       dueDay: customDay,
       dueTiming: 'same_month',
       cycleKind: 'custom_day',
       usesEmployeeCustomDay: true,
+      cycleKey: getPayrollCycleKey(employee?.id || 'unknown', periodStart, periodEnd),
     };
   }
 
   const dueDay = normalizeDay(globalDueDay);
+  const periodStart = safePeriod + '-01';
+  const periodEnd = getLastDateOfPeriod(safePeriod);
+
   return {
     period: safePeriod,
-    periodStart: safePeriod + '-01',
-    periodEnd: getLastDateOfPeriod(safePeriod),
+    periodStart,
+    periodEnd,
     dueDate: getSalaryDueDate(safePeriod, dueDay, globalDueTiming),
     dueDay,
     dueTiming: globalDueTiming,
     cycleKind: 'calendar_month',
     usesEmployeeCustomDay: false,
+    cycleKey: getPayrollCycleKey(employee?.id || 'unknown', periodStart, periodEnd),
   };
 }
 
@@ -183,6 +203,56 @@ export function getEmployeeAutoPayrollPeriod(
   return today > currentCycle.dueDate
     ? getNextPayrollPeriod(currentPeriod)
     : currentPeriod;
+}
+
+export function resolveEmployeeTargetPayrollPeriod(
+  employee: any,
+  configuredActivePeriod: unknown,
+  globalDueDay = 28,
+  globalDueTiming: SalaryDueTiming = 'same_month',
+  referenceDate: Date = new Date()
+): PayrollPeriod {
+  const automatic = getEmployeeAutoPayrollPeriod(
+    employee,
+    globalDueDay,
+    globalDueTiming,
+    referenceDate
+  );
+
+  if (!isValidPayrollPeriod(configuredActivePeriod)) {
+    return automatic;
+  }
+
+  // A manually started system month is authoritative when it is ahead,
+  // while employee payday logic can still advance a custom cycle automatically.
+  return configuredActivePeriod > automatic ? configuredActivePeriod : automatic;
+}
+
+export function payrollRecordMatchesCycle(
+  record: {
+    period?: PayrollPeriod;
+    cycleKey?: string;
+    periodStart?: string;
+    periodEnd?: string;
+  },
+  cycle: EmployeePayrollCycle
+): boolean {
+  if (record.cycleKey) {
+    return record.cycleKey === cycle.cycleKey;
+  }
+
+  // Transitional records created after custom cycles were introduced but
+  // before cycleKey existed can still be identified safely by exact dates.
+  if (record.periodStart && record.periodEnd) {
+    return (
+      record.periodStart === cycle.periodStart &&
+      record.periodEnd === cycle.periodEnd
+    );
+  }
+
+  // Pre-cycle legacy records had only YYYY-MM. Reuse them only for the old
+  // calendar-month model, never for a custom-payday cycle with the same label.
+  return !cycle.usesEmployeeCustomDay && record.period === cycle.period;
 }
 
 export function getNextEmployeePayrollCycle(

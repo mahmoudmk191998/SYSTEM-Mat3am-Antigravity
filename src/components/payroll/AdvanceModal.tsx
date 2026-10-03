@@ -23,7 +23,7 @@ import type { PaymentMethod, AdvanceRepaymentType, PayrollPeriod } from '@/types
 import { useAuth } from '@/hooks/useAuth';
 import {
   getCurrentPayrollPeriod,
-  getEmployeeAutoPayrollPeriod,
+  resolveEmployeeTargetPayrollPeriod,
   getPayrollPeriodLabel,
   isValidPayrollPeriod,
 } from '@/lib/payrollPeriods';
@@ -89,7 +89,12 @@ export const AdvanceModal: React.FC<AdvanceModalProps> = ({
       selectedEmployee?.salary_due_day !== '';
 
     if (hasCustomPayday) {
-      setPayrollPeriod(getEmployeeAutoPayrollPeriod(selectedEmployee));
+      setPayrollPeriod(
+        resolveEmployeeTargetPayrollPeriod(
+          selectedEmployee,
+          currentPayrollPeriod
+        )
+      );
       return;
     }
 

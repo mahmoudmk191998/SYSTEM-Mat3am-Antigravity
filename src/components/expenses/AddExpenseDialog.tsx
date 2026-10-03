@@ -26,7 +26,7 @@ import { usePayroll } from '@/hooks/usePayroll';
 import type { ExpenseCategory } from '@/types/expenses';
 import type { PaymentMethod } from '@/types/payroll';
 import { DollarSign, UserCheck, AlertCircle, ArrowUpRight } from 'lucide-react';
-import { getEmployeeAutoPayrollPeriod, getPayrollPeriodLabel } from '@/lib/payrollPeriods';
+import { getPayrollPeriodLabel } from '@/lib/payrollPeriods';
 
 interface AddExpenseDialogProps {
   open: boolean;
@@ -52,7 +52,12 @@ export function AddExpenseDialog({ open, onOpenChange, onSuccess, onOpenPayroll 
 
   // HR & Payroll hooks for salary flow
   const { employees, attendance, hrSettings } = useHR(tenantId);
-  const { getPayrollForPeriod, disburseSalaryPayment, isSubmittingPayment } = usePayroll(tenantId, branchId);
+  const {
+    getPayrollForPeriod,
+    resolveEmployeePayrollPeriod,
+    disburseSalaryPayment,
+    isSubmittingPayment,
+  } = usePayroll(tenantId, branchId);
 
   // Form State
   const { register, handleSubmit, formState: { errors }, setValue, watch, reset } = useForm<FormData>({
@@ -77,12 +82,8 @@ export function AddExpenseDialog({ open, onOpenChange, onSuccess, onOpenPayroll 
     const emp = employees.find((e) => e.id === selectedEmpId);
     if (!emp) return null;
 
-    return getEmployeeAutoPayrollPeriod(
-      emp,
-      hrSettings.salary_due_day ?? 28,
-      hrSettings.salary_due_timing ?? 'same_month'
-    );
-  }, [selectedEmpId, employees, hrSettings.salary_due_day, hrSettings.salary_due_timing]);
+    return resolveEmployeePayrollPeriod(emp, hrSettings);
+  }, [selectedEmpId, employees, hrSettings, resolveEmployeePayrollPeriod]);
 
   const selectedEmployeePayroll = useMemo(() => {
     if (categoryValue !== 'رواتب' || !selectedEmpId || !selectedEmployeePeriod) return null;

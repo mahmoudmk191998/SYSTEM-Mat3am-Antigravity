@@ -35,6 +35,7 @@ export interface PayrollRecord {
   periodEnd?: string;
   salaryDueDate?: string;
   cycleKind?: PayrollCycleKind;
+  cycleKey?: string;
   year: number;
   month: number;
   basicSalarySnapshot: number;
@@ -71,6 +72,7 @@ export interface SalaryPayment {
   employeeId: string;
   employeeName: string;
   payrollPeriod: PayrollPeriod;
+  payrollCycleKey?: string;
   amount: number;
   paymentMethod: PaymentMethod;
   referenceNumber?: string;
@@ -103,7 +105,8 @@ export interface Advance {
   firstDeductionPeriod?: PayrollPeriod; // First payroll month eligible for deduction
   paymentMethod: PaymentMethod;
   status: AdvanceStatus;
-  deductedPeriods: PayrollPeriod[]; // e.g. ['2026-09', '2026-10'] - prevents duplicate installment deduction
+  deductedPeriods: PayrollPeriod[]; // legacy compatibility / human-readable month history
+  deductedCycleKeys?: string[]; // exact cycle identity for post-cycle-system deductions
   notes?: string;
   expenseId?: string;
   expense_id?: string;
@@ -122,6 +125,7 @@ export interface AdvanceInstallment {
   employeeId: string;
   payrollId: string;
   period: PayrollPeriod;
+  cycleKey?: string;
   amount: number;
   status: 'paid' | 'voided' | 'cancelled';
   voidReason?: string;
