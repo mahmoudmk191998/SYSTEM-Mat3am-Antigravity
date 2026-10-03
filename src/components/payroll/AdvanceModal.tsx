@@ -21,12 +21,17 @@ import {
 import { HandCoins, Calculator, Calendar } from 'lucide-react';
 import type { PaymentMethod, AdvanceRepaymentType, PayrollPeriod } from '@/types/payroll';
 import { useAuth } from '@/hooks/useAuth';
-import { getCurrentPayrollPeriod, getPayrollPeriodLabel, isValidPayrollPeriod } from '@/lib/payrollPeriods';
+import {
+  getCurrentPayrollPeriod,
+  getEmployeeAutoPayrollPeriod,
+  getPayrollPeriodLabel,
+  isValidPayrollPeriod,
+} from '@/lib/payrollPeriods';
 
 interface AdvanceModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  employees: Array<{ id: string; name: string; role?: string }>;
+  employees: Array<{ id: string; name: string; role?: string; salary_due_day?: number | string | null }>;
   defaultEmployeeId?: string;
   currentPayrollPeriod?: PayrollPeriod;
   onSaveAdvance: (data: {
@@ -75,12 +80,23 @@ export const AdvanceModal: React.FC<AdvanceModalProps> = ({
   }, [defaultEmployeeId, employees]);
 
   React.useEffect(() => {
-    if (open) {
-      setPayrollPeriod(
-        isValidPayrollPeriod(currentPayrollPeriod) ? currentPayrollPeriod : getCurrentPayrollPeriod()
-      );
+    if (!open) return;
+
+    const selectedEmployee = employees.find((emp) => emp.id === employeeId);
+    const hasCustomPayday =
+      selectedEmployee?.salary_due_day !== null &&
+      selectedEmployee?.salary_due_day !== undefined &&
+      selectedEmployee?.salary_due_day !== '';
+
+    if (hasCustomPayday) {
+      setPayrollPeriod(getEmployeeAutoPayrollPeriod(selectedEmployee));
+      return;
     }
-  }, [open, currentPayrollPeriod]);
+
+    setPayrollPeriod(
+      isValidPayrollPeriod(currentPayrollPeriod) ? currentPayrollPeriod : getCurrentPayrollPeriod()
+    );
+  }, [open, currentPayrollPeriod, employeeId, employees]);
 
   const numAmount = Number(amount) || 0;
   const calculatedInstallment = repaymentType === 'installments' && numberOfInstallments > 0
