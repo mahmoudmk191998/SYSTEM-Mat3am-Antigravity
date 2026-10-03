@@ -8,6 +8,7 @@ import type {
   AttendanceSummary,
 } from '@/types/payroll';
 import type { EmployeeLeave } from '@/types/leave';
+import { isAdvanceEligibleForPeriod } from '@/lib/payrollPeriods';
 
 export interface EmployeeData {
   id: string;
@@ -229,7 +230,10 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
 
   // 5. Advances Deductions (Strict idempotency checking!)
   const empAdvances = advances.filter(
-    (adv) => adv.employeeId === employee.id && adv.status !== 'cancelled'
+    (adv) =>
+      adv.employeeId === employee.id &&
+      adv.status !== 'cancelled' &&
+      isAdvanceEligibleForPeriod(adv, period)
   );
 
   let advanceDeductions = 0;
@@ -333,6 +337,10 @@ export function calculateAdvanceDueInstallment(advance: Advance, period: Payroll
     return 0;
   }
   if (advance.remainingAmount <= 0) {
+    return 0;
+  }
+  // Never apply a new advance retroactively to an older payroll period.
+  if (!isAdvanceEligibleForPeriod(advance, period)) {
     return 0;
   }
   if (advance.deductedPeriods && advance.deductedPeriods.includes(period)) {
