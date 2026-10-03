@@ -348,7 +348,8 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
             status: 'paid',
             updatedAt: nowIso,
           },
-          currentUser
+          currentUser,
+          { skipAdvanceSealing: true }
         );
       } else {
         await fetchAllPayrollData();
@@ -371,7 +372,8 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
    */
   const settlePayrollCycle = async (
     payroll: PayrollRecord,
-    currentUser?: { uid?: string; email?: string; name?: string }
+    currentUser?: { uid?: string; email?: string; name?: string },
+    options?: { skipAdvanceSealing?: boolean }
   ): Promise<boolean> => {
     if (!tenantId) return false;
 
@@ -402,12 +404,14 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
         { merge: true }
       );
 
-      const employeeAdvances = advances.filter(
-        (a) =>
-          a.employeeId === payroll.employeeId &&
-          a.status !== 'cancelled' &&
-          (!a.deductedPeriods || !a.deductedPeriods.includes(payroll.period))
-      );
+      const employeeAdvances = options?.skipAdvanceSealing
+        ? []
+        : advances.filter(
+            (a) =>
+              a.employeeId === payroll.employeeId &&
+              a.status !== 'cancelled' &&
+              (!a.deductedPeriods || !a.deductedPeriods.includes(payroll.period))
+          );
 
       let settledAdvanceAmount = 0;
 
@@ -456,12 +460,13 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
         settledAdvanceAmount += installment;
       }
 
+      const hasAdvanceOffset = settledAdvanceAmount > 0 || payroll.advanceDeductions > 0;
       const settlementSource =
-        payroll.totalPaid > 0 && settledAdvanceAmount > 0
+        payroll.totalPaid > 0 && hasAdvanceOffset
           ? 'mixed'
           : payroll.totalPaid > 0
             ? 'salary_payment'
-            : settledAdvanceAmount > 0 || payroll.advanceDeductions > 0
+            : hasAdvanceOffset
               ? 'advance_offset'
               : 'deductions';
 
