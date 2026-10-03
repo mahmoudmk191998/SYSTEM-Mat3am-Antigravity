@@ -33,6 +33,7 @@ import {
   type AttendanceRecordData,
 } from '@/lib/payrollEngine';
 import { toast } from 'sonner';
+import { getCurrentPayrollPeriod, isValidPayrollPeriod } from '@/lib/payrollPeriods';
 
 /**
  * Deeply strips undefined values from an object or array to prevent Firestore
@@ -507,6 +508,7 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
     installmentAmount?: number;
     numberOfInstallments?: number;
     startDate: string;
+    payrollPeriod?: PayrollPeriod;
     paymentMethod: PaymentMethod;
     notes?: string;
     currentUser?: { name?: string; email?: string; uid?: string };
@@ -523,6 +525,11 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
         toast.error('قيمة السلفة يجب أن تكون أكبر من الصفر');
         return null;
       }
+
+      const requestedPayrollPeriod = advanceData.payrollPeriod || advanceData.startDate?.slice(0, 7);
+      const payrollPeriod = isValidPayrollPeriod(requestedPayrollPeriod)
+        ? requestedPayrollPeriod
+        : getCurrentPayrollPeriod();
 
       const isInstallments = advanceData.repaymentType === 'installments';
       const numberOfInstallments = isInstallments ? Math.max(1, Number(advanceData.numberOfInstallments) || 1) : 1;
@@ -546,6 +553,8 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
           numberOfInstallments,
           remainingInstallments: numberOfInstallments,
           startDate: advanceData.startDate,
+          payrollPeriod,
+          firstDeductionPeriod: payrollPeriod,
           paymentMethod: advanceData.paymentMethod,
           status: 'active',
           deductedPeriods: [],
@@ -581,6 +590,7 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
           employee_name: advanceData.employeeName,
           advance_id: advanceId,
           reference_id: expenseId,
+          payroll_period: payrollPeriod,
           affectsCashFlow: true,
           affectsProfitLoss: false,
           isOperatingExpense: false,
@@ -612,8 +622,9 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
           employeeName: advanceData.employeeName,
           amount,
           cashTransactionId: expenseId,
+          payrollPeriod,
           user: advanceData.currentUser?.name || advanceData.currentUser?.email || 'المدير',
-          details: `إنشاء سلفة جديدة للموظف ${advanceData.employeeName} بمبلغ ${amount} ج.م وقيد حركة خروج نقدية مرتبطة (${expenseId})`,
+          details: `إنشاء سلفة جديدة للموظف ${advanceData.employeeName} بمبلغ ${amount} ج.م مرتبطة بمسير ${payrollPeriod} وقيد حركة خروج نقدية (${expenseId})`,
           severity: 'info',
           created_at: nowIso,
         })
