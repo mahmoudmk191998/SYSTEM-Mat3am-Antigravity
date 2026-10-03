@@ -33,7 +33,11 @@ import {
   type AttendanceRecordData,
 } from '@/lib/payrollEngine';
 import { toast } from 'sonner';
-import { getCurrentPayrollPeriod, isValidPayrollPeriod } from '@/lib/payrollPeriods';
+import {
+  getCurrentPayrollPeriod,
+  getEmployeePayrollCycle,
+  isValidPayrollPeriod,
+} from '@/lib/payrollPeriods';
 
 /**
  * Deeply strips undefined values from an object or array to prevent Firestore
@@ -121,6 +125,13 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
           (p) => p.employeeId === emp.id && p.period === period
         );
 
+        const cycle = getEmployeePayrollCycle(
+          period,
+          emp,
+          hrSettings?.salary_due_day ?? 28,
+          hrSettings?.salary_due_timing ?? 'same_month'
+        );
+
         return calculateEmployeePayroll({
           employee: emp,
           period,
@@ -130,6 +141,10 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
           existingRecord: existing,
           hrSettings,
           approvedLeaves: leaves,
+          periodStart: cycle.periodStart,
+          periodEnd: cycle.periodEnd,
+          salaryDueDate: cycle.dueDate,
+          cycleKind: cycle.cycleKind,
         });
       });
     },
@@ -324,8 +339,22 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
         paymentId
       ).catch(() => {});
 
+      if (newRemaining === 0) {
+        await settlePayrollCycle(
+          {
+            ...payroll,
+            totalPaid: newTotalPaid,
+            remaining: 0,
+            status: 'paid',
+            updatedAt: nowIso,
+          },
+          currentUser
+        );
+      } else {
+        await fetchAllPayrollData();
+      }
+
       toast.success(`تم صرف الراتب بنجاح: ${amount.toLocaleString('ar-EG')} ج.م للموظف ${payroll.employeeName}`);
-      await fetchAllPayrollData();
       return true;
     } catch (err: any) {
       console.error('Error disbursing salary payment:', err);
@@ -333,6 +362,167 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
       return false;
     } finally {
       setIsSubmittingPayment(false);
+    }
+  };
+
+  /**
+   * Finalizes a fully settled payroll cycle without creating any extra expense.
+   * This seals advance installments exactly once and preserves the historical snapshot.
+   */
+  const settlePayrollCycle = async (
+    payroll: PayrollRecord,
+    currentUser?: { uid?: string; email?: string; name?: string }
+  ): Promise<boolean> => {
+    if (!tenantId) return false;
+
+    if (payroll.remaining > 0 || payroll.status !== 'paid') {
+      toast.error('لا يمكن إقفال دورة الراتب قبل تسوية كامل المستحق');
+      return false;
+    }
+
+    if (payroll.settlementStatus === 'completed' || payroll.settledAt) {
+      return true;
+    }
+
+    const nowIso = new Date().toISOString();
+    const performedBy = currentUser?.name || currentUser?.email || currentUser?.uid || 'المدير';
+
+    try {
+      await setDoc(
+        doc(db, 'payrolls', payroll.id),
+        sanitizeForFirestore({
+          ...payroll,
+          tenant_id: payroll.tenant_id || tenantId,
+          branch_id: branchId || payroll.branch_id || '',
+          remaining: 0,
+          status: 'paid',
+          settlementStatus: 'processing',
+          updatedAt: nowIso,
+        }),
+        { merge: true }
+      );
+
+      const employeeAdvances = advances.filter(
+        (a) =>
+          a.employeeId === payroll.employeeId &&
+          a.status !== 'cancelled' &&
+          (!a.deductedPeriods || !a.deductedPeriods.includes(payroll.period))
+      );
+
+      let settledAdvanceAmount = 0;
+
+      for (const adv of employeeAdvances) {
+        const installment = calculateAdvanceDueInstallment(adv, payroll.period);
+        if (installment <= 0) continue;
+
+        const existingInstallment = advanceInstallments.find(
+          (i) =>
+            i.advanceId === adv.id &&
+            i.employeeId === payroll.employeeId &&
+            i.period === payroll.period &&
+            i.status === 'paid'
+        );
+
+        if (!existingInstallment) {
+          await addDoc(
+            collection(db, 'advance_installments'),
+            sanitizeForFirestore({
+              tenant_id: tenantId,
+              advanceId: adv.id,
+              employeeId: payroll.employeeId,
+              payrollId: payroll.id,
+              period: payroll.period,
+              amount: installment,
+              status: 'paid',
+              paidAt: nowIso,
+              createdAt: nowIso,
+            })
+          );
+        }
+
+        const updatedAdv = applyAdvanceDeduction(adv, payroll.period, installment);
+        await updateDoc(
+          doc(db, 'advances', adv.id),
+          sanitizeForFirestore({
+            paidAmount: updatedAdv.paidAmount,
+            remainingAmount: updatedAdv.remainingAmount,
+            remainingInstallments: updatedAdv.remainingInstallments,
+            status: updatedAdv.status,
+            deductedPeriods: updatedAdv.deductedPeriods,
+            updatedAt: nowIso,
+          })
+        );
+
+        settledAdvanceAmount += installment;
+      }
+
+      const settlementSource =
+        payroll.totalPaid > 0 && settledAdvanceAmount > 0
+          ? 'mixed'
+          : payroll.totalPaid > 0
+            ? 'salary_payment'
+            : settledAdvanceAmount > 0 || payroll.advanceDeductions > 0
+              ? 'advance_offset'
+              : 'deductions';
+
+      await setDoc(
+        doc(db, 'payrolls', payroll.id),
+        sanitizeForFirestore({
+          ...payroll,
+          tenant_id: payroll.tenant_id || tenantId,
+          branch_id: branchId || payroll.branch_id || '',
+          remaining: 0,
+          status: 'paid',
+          settledAt: nowIso,
+          settledBy: performedBy,
+          settlementSource,
+          settledAdvanceAmount: Math.max(settledAdvanceAmount, payroll.advanceDeductions || 0),
+          settlementStatus: 'completed',
+          updatedAt: nowIso,
+        }),
+        { merge: true }
+      );
+
+      await addDoc(
+        collection(db, 'audit_logs'),
+        sanitizeForFirestore({
+          tenant_id: tenantId,
+          branch_id: branchId || payroll.branch_id || '',
+          action: 'PAYROLL_CYCLE_SETTLED',
+          entityType: 'payroll',
+          entityId: payroll.id,
+          employeeId: payroll.employeeId,
+          employeeName: payroll.employeeName,
+          payrollPeriod: payroll.period,
+          periodStart: payroll.periodStart || '',
+          periodEnd: payroll.periodEnd || '',
+          salaryDueDate: payroll.salaryDueDate || '',
+          totalPaid: payroll.totalPaid,
+          advanceDeductions: payroll.advanceDeductions,
+          settlementSource,
+          performedBy,
+          performedAt: nowIso,
+          details: 'تم إقفال دورة راتب ' + payroll.employeeName + ' للفترة ' + payroll.period,
+          severity: 'info',
+          created_at: nowIso,
+        })
+      );
+
+      await fetchAllPayrollData();
+      toast.success('تم إقفال دورة الراتب وتثبيت السلف بنجاح');
+      return true;
+    } catch (err: any) {
+      console.error('Error settling payroll cycle:', err);
+      await setDoc(
+        doc(db, 'payrolls', payroll.id),
+        sanitizeForFirestore({
+          settlementStatus: 'failed',
+          updatedAt: new Date().toISOString(),
+        }),
+        { merge: true }
+      ).catch(() => {});
+      toast.error('حدث خطأ أثناء إقفال دورة الراتب: ' + err.message);
+      return false;
     }
   };
 
@@ -1081,6 +1271,7 @@ export function usePayroll(tenantId: string | null, branchId?: string | null) {
     fetchAllPayrollData,
     getPayrollForPeriod,
     disburseSalaryPayment,
+    settlePayrollCycle,
     voidSalaryPayment,
     createAdvance,
     cancelAdvance,
