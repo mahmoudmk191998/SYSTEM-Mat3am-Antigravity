@@ -426,6 +426,15 @@ export default function HR() {
       toast.error('الاسم والمسمى الوظيفي مطلوبان');
       return;
     }
+
+    if (newEmployee.salary_due_day) {
+      const dueDay = Number(newEmployee.salary_due_day);
+      if (!Number.isFinite(dueDay) || dueDay < 1 || dueDay > 31) {
+        toast.error('يوم صرف الراتب يجب أن يكون من 1 إلى 31');
+        return;
+      }
+    }
+
     if (newEmployee.pin && !/^\d{4}$/.test(newEmployee.pin)) {
       toast.error('رمز PIN يجب أن يتكون من 4 أرقام بالضبط');
       return;
@@ -465,6 +474,15 @@ export default function HR() {
   // Handle Update Employee
   const handleUpdateEmployee = async () => {
     if (!editingEmployee) return;
+
+    if (editingEmployee.salary_due_day) {
+      const dueDay = Number(editingEmployee.salary_due_day);
+      if (!Number.isFinite(dueDay) || dueDay < 1 || dueDay > 31) {
+        toast.error('يوم صرف الراتب يجب أن يكون من 1 إلى 31');
+        return;
+      }
+    }
+
     const success = await updateEmployee(editingEmployee.id, {
       name: editingEmployee.name,
       phone: editingEmployee.phone,
