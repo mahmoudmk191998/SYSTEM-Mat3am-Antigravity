@@ -57,7 +57,7 @@ interface PayrollTableProps {
   periodRecords: PayrollRecord[];
   allPayments: SalaryPayment[];
   allAdvances: Advance[];
-  employees: Array<{ id: string; name: string; role?: string }>;
+  employees: Array<{ id: string; name: string; role?: string; salary_due_day?: number | string | null }>;
   currentPeriod: PayrollPeriod;
   onPeriodChange: (period: PayrollPeriod) => void;
   activePayrollPeriod?: PayrollPeriod;
