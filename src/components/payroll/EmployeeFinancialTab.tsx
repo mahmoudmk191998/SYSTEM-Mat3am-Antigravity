@@ -622,7 +622,12 @@ export const EmployeeFinancialTab: React.FC<EmployeeFinancialTabProps> = ({
       <AdvanceModal
         open={isAdvanceModalOpen}
         onOpenChange={setIsAdvanceModalOpen}
-        employees={[{ id: employee.id, name: employee.name, role: employee.role }]}
+        employees={[{
+          id: employee.id,
+          name: employee.name,
+          role: employee.role,
+          salary_due_day: employee.salary_due_day,
+        }]}
         defaultEmployeeId={employee.id}
         currentPayrollPeriod={activePayrollPeriod}
         onSaveAdvance={onCreateAdvance}
