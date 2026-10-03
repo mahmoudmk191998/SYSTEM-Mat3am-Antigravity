@@ -26,6 +26,7 @@ import { usePayroll } from '@/hooks/usePayroll';
 import type { ExpenseCategory } from '@/types/expenses';
 import type { PaymentMethod } from '@/types/payroll';
 import { DollarSign, UserCheck, AlertCircle, ArrowUpRight } from 'lucide-react';
+import { getEmployeeAutoPayrollPeriod, getPayrollPeriodLabel } from '@/lib/payrollPeriods';
 
 interface AddExpenseDialogProps {
   open: boolean;
@@ -70,21 +71,27 @@ export function AddExpenseDialog({ open, onOpenChange, onSuccess, onOpenPayroll 
   const [salaryNotes, setSalaryNotes] = useState('');
   const [salaryAmount, setSalaryAmount] = useState<number>(0);
 
-  const currentPeriod = useMemo(() => {
-    const d = new Date();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    return `${d.getFullYear()}-${m}`;
-  }, []);
-
-  // Compute calculated payroll record for the selected employee in current period
-  const selectedEmployeePayroll = useMemo(() => {
-    if (categoryValue !== 'رواتب' || !selectedEmpId) return null;
+  // Resolve the selected employee's active payroll cycle. A custom-payday
+  // employee can already be in the next cycle while still in the same calendar month.
+  const selectedEmployeePeriod = useMemo(() => {
     const emp = employees.find((e) => e.id === selectedEmpId);
     if (!emp) return null;
 
-    const records = getPayrollForPeriod(currentPeriod, [emp], attendance, hrSettings);
+    return getEmployeeAutoPayrollPeriod(
+      emp,
+      hrSettings.salary_due_day ?? 28,
+      hrSettings.salary_due_timing ?? 'same_month'
+    );
+  }, [selectedEmpId, employees, hrSettings.salary_due_day, hrSettings.salary_due_timing]);
+
+  const selectedEmployeePayroll = useMemo(() => {
+    if (categoryValue !== 'رواتب' || !selectedEmpId || !selectedEmployeePeriod) return null;
+    const emp = employees.find((e) => e.id === selectedEmpId);
+    if (!emp) return null;
+
+    const records = getPayrollForPeriod(selectedEmployeePeriod, [emp], attendance, hrSettings);
     return records[0] || null;
-  }, [categoryValue, selectedEmpId, employees, attendance, hrSettings, currentPeriod, getPayrollForPeriod]);
+  }, [categoryValue, selectedEmpId, selectedEmployeePeriod, employees, attendance, hrSettings, getPayrollForPeriod]);
 
   // Sync amount when employee selected
   useEffect(() => {
@@ -253,7 +260,7 @@ export function AddExpenseDialog({ open, onOpenChange, onSuccess, onOpenPayroll 
               {selectedEmployeePayroll && (
                 <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800/80 space-y-1.5 text-xs">
                   <div className="flex justify-between items-center text-[11px] text-muted-foreground border-b border-slate-800 pb-1">
-                    <span>شهر: {currentPeriod}</span>
+                    <span>الدورة: {selectedEmployeePeriod ? getPayrollPeriodLabel(selectedEmployeePeriod) : '—'}</span>
                     <span>الأساسي: {selectedEmployeePayroll.basicSalarySnapshot.toLocaleString('ar-EG')} ج.م</span>
                   </div>
                   <div className="grid grid-cols-3 gap-1 text-center pt-0.5">
