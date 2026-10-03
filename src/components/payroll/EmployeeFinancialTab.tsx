@@ -41,9 +41,22 @@ import {
   AlertTriangle,
   FileText,
   Trash2,
+  CalendarClock,
 } from 'lucide-react';
-import type { PayrollRecord, SalaryPayment, Advance, AdvanceInstallment } from '@/types/payroll';
-import { getAdvancePayrollPeriodLabel } from '@/lib/payrollPeriods';
+import type {
+  PayrollRecord,
+  SalaryPayment,
+  Advance,
+  AdvanceInstallment,
+  SalaryDueTiming,
+} from '@/types/payroll';
+import {
+  getAdvancePayrollPeriodLabel,
+  getEmployeeAutoPayrollPeriod,
+  getEmployeePayrollCycle,
+  getNextEmployeePayrollCycle,
+  getPayrollPeriodLabel,
+} from '@/lib/payrollPeriods';
 import { AdvanceModal } from './AdvanceModal';
 import { VoidPaymentModal } from './VoidPaymentModal';
 import { CancelAdvanceModal } from './CancelAdvanceModal';
@@ -61,6 +74,8 @@ interface EmployeeFinancialTabProps {
   onDeleteAdvance?: (advanceId: string, reason: string) => Promise<{ success: boolean; message?: string }>;
   onVoidPayment?: (paymentId: string, reason: string) => Promise<boolean>;
   onReverseInstallment?: (installmentId: string, reason: string) => Promise<boolean>;
+  salaryDueDay?: number;
+  salaryDueTiming?: SalaryDueTiming;
   isProcessing?: boolean;
 }
 
@@ -75,10 +90,25 @@ export const EmployeeFinancialTab: React.FC<EmployeeFinancialTabProps> = ({
   onDeleteAdvance,
   onVoidPayment,
   onReverseInstallment,
+  salaryDueDay = 28,
+  salaryDueTiming = 'same_month',
   isProcessing = false,
 }) => {
   const [isAdvanceModalOpen, setIsAdvanceModalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
+
+  const activePayrollPeriod = useMemo(
+    () => getEmployeeAutoPayrollPeriod(employee, salaryDueDay, salaryDueTiming),
+    [employee, salaryDueDay, salaryDueTiming]
+  );
+  const activeCycle = useMemo(
+    () => getEmployeePayrollCycle(activePayrollPeriod, employee, salaryDueDay, salaryDueTiming),
+    [activePayrollPeriod, employee, salaryDueDay, salaryDueTiming]
+  );
+  const nextCycle = useMemo(
+    () => getNextEmployeePayrollCycle(activePayrollPeriod, employee, salaryDueDay, salaryDueTiming),
+    [activePayrollPeriod, employee, salaryDueDay, salaryDueTiming]
+  );
 
   // Modal Targets
   const [deleteAdvanceTarget, setDeleteAdvanceTarget] = useState<Advance | null>(null);
@@ -235,6 +265,38 @@ export const EmployeeFinancialTab: React.FC<EmployeeFinancialTabProps> = ({
 
   return (
     <div className="space-y-4 py-1 text-xs">
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="p-3.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <CalendarClock className="w-4 h-4 text-primary" />
+                <span className="text-xs font-bold">دورة الراتب الحالية</span>
+                <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
+                  {getPayrollPeriodLabel(activePayrollPeriod)}
+                </Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                من <span className="font-mono text-slate-200">{activeCycle.periodStart}</span>
+                {' '}إلى <span className="font-mono text-slate-200">{activeCycle.periodEnd}</span>
+                {' '}• موعد الصرف: <span className="font-mono font-bold text-emerald-400">{activeCycle.dueDate}</span>
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                الدورة التالية تبدأ {nextCycle.periodStart} وتستحق {nextCycle.dueDate}
+              </p>
+            </div>
+            <div className="text-right sm:text-left">
+              <p className="text-[10px] text-muted-foreground">نظام الموعد</p>
+              <p className="text-xs font-bold">
+                {activeCycle.usesEmployeeCustomDay
+                  ? `يوم ${activeCycle.dueDay} مخصص للموظف`
+                  : `الموعد العام: يوم ${activeCycle.dueDay}`}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* 1. Top Three Summary Blocks */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {/* Block A: Current Salary Package */}
@@ -562,6 +624,7 @@ export const EmployeeFinancialTab: React.FC<EmployeeFinancialTabProps> = ({
         onOpenChange={setIsAdvanceModalOpen}
         employees={[{ id: employee.id, name: employee.name, role: employee.role }]}
         defaultEmployeeId={employee.id}
+        currentPayrollPeriod={activePayrollPeriod}
         onSaveAdvance={onCreateAdvance}
       />
 
