@@ -300,6 +300,45 @@ describe('Payroll Period & Advance Month Tracking', () => {
     expect(payroll.status).toBe('unpaid');
   });
 
+  it('does not display or double-charge a legacy installment already deducted in the same month', () => {
+    const employee = { id: 'emp_1', name: 'محمد', salary: 9000, salary_due_day: 15 };
+    const cycle = getEmployeePayrollCycle('2026-10', employee, 28, 'same_month');
+
+    const legacyPartiallyPaidAdvance = makeAdvance({
+      id: 'legacy_installment_advance',
+      amount: 6000,
+      paidAmount: 3000,
+      remainingAmount: 3000,
+      repaymentType: 'installments',
+      installmentAmount: 3000,
+      numberOfInstallments: 2,
+      remainingInstallments: 1,
+      payrollPeriod: undefined,
+      firstDeductionPeriod: undefined,
+      startDate: '2026-09-01',
+      status: 'partially_paid',
+      deductedPeriods: ['2026-10'],
+      deductedCycleKeys: undefined,
+    });
+
+    const payroll = calculateEmployeePayroll({
+      employee,
+      period: '2026-10',
+      periodStart: cycle.periodStart,
+      periodEnd: cycle.periodEnd,
+      salaryDueDate: cycle.dueDate,
+      cycleKind: cycle.cycleKind,
+      cycleKey: cycle.cycleKey,
+      attendanceRecords: [],
+      advances: [legacyPartiallyPaidAdvance],
+      payments: [],
+    });
+
+    expect(payroll.advanceDeductions).toBe(0);
+    expect(payroll.netSalary).toBe(9000);
+    expect(payroll.remaining).toBe(9000);
+  });
+
   it('new salary payment affects only its exact custom cycle', () => {
     const employee = { id: 'emp_1', name: 'محمد', salary: 9000, salary_due_day: 15 };
     const cycle = getEmployeePayrollCycle('2026-10', employee, 28, 'same_month');
