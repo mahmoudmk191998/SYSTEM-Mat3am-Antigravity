@@ -1,4 +1,5 @@
 export type PayrollPeriod = string; // Format: 'YYYY-MM' (e.g. '2026-09')
+export type SalaryDueTiming = 'same_month' | 'next_month';
 
 export type PayrollStatus = 'unpaid' | 'partial' | 'paid';
 
@@ -86,7 +87,9 @@ export interface Advance {
   installmentAmount: number;
   numberOfInstallments: number;
   remainingInstallments: number;
-  startDate: string; // YYYY-MM-DD
+  startDate: string; // YYYY-MM-DD — actual advance disbursement date
+  payrollPeriod?: PayrollPeriod; // Payroll month this advance belongs to
+  firstDeductionPeriod?: PayrollPeriod; // First payroll month eligible for deduction
   paymentMethod: PaymentMethod;
   status: AdvanceStatus;
   deductedPeriods: PayrollPeriod[]; // e.g. ['2026-09', '2026-10'] - prevents duplicate installment deduction

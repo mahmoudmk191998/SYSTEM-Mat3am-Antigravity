@@ -35,7 +35,8 @@ import {
   Layers,
   ArrowDownLeft,
 } from 'lucide-react';
-import type { Advance, EmployeeData } from '@/types/payroll';
+import type { Advance } from '@/types/payroll';
+import { getAdvancePayrollPeriodLabel, resolveAdvancePayrollPeriod } from '@/lib/payrollPeriods';
 
 interface ActiveAdvancesTableProps {
   advances: Advance[];
@@ -56,6 +57,14 @@ export const ActiveAdvancesTable: React.FC<ActiveAdvancesTableProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewFilter, setViewFilter] = useState<'active' | 'history' | 'all'>('active');
+  const [periodFilter, setPeriodFilter] = useState<string>('all');
+
+  const availablePeriods = useMemo(() => {
+    const values = advances
+      .map((adv) => resolveAdvancePayrollPeriod(adv))
+      .filter((period): period is string => Boolean(period));
+    return Array.from(new Set(values)).sort((a, b) => b.localeCompare(a));
+  }, [advances]);
 
   // Filtered Advances
   const filteredAdvances = useMemo(() => {
@@ -68,22 +77,30 @@ export const ActiveAdvancesTable: React.FC<ActiveAdvancesTableProps> = ({
         }
       } else if (viewFilter === 'history') {
         // Completed or cancelled
-        if (adv.status !== 'paid' && adv.status !== 'cancelled') {
+        if (adv.status !== 'fully_paid' && adv.status !== 'cancelled') {
           return false;
         }
       }
 
-      // 2. Search Query
+      // 2. Payroll Month
+      const advancePeriod = resolveAdvancePayrollPeriod(adv);
+      if (periodFilter !== 'all' && advancePeriod !== periodFilter) {
+        return false;
+      }
+
+      // 3. Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchName = adv.employeeName?.toLowerCase().includes(q);
         const matchNotes = adv.notes?.toLowerCase().includes(q);
-        if (!matchName && !matchNotes) return false;
+        const matchPeriod = (advancePeriod || '').includes(q) ||
+          getAdvancePayrollPeriodLabel(adv).toLowerCase().includes(q);
+        if (!matchName && !matchNotes && !matchPeriod) return false;
       }
 
       return true;
     });
-  }, [advances, viewFilter, searchQuery]);
+  }, [advances, viewFilter, periodFilter, searchQuery]);
 
   // Summary Metrics
   const metrics = useMemo(() => {
@@ -167,6 +184,20 @@ export const ActiveAdvancesTable: React.FC<ActiveAdvancesTableProps> = ({
               <SelectItem value="all">جميع السلف ({advances.length})</SelectItem>
             </SelectContent>
           </Select>
+
+          <Select value={periodFilter} onValueChange={setPeriodFilter}>
+            <SelectTrigger className="w-full sm:w-[180px] h-9 text-xs bg-slate-900/80 border-slate-700">
+              <SelectValue placeholder="شهر السلفة" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل الشهور</SelectItem>
+              {availablePeriods.map((period) => (
+                <SelectItem key={period} value={period}>
+                  {getAdvancePayrollPeriodLabel({ payrollPeriod: period } as Advance)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <Button
@@ -195,7 +226,7 @@ export const ActiveAdvancesTable: React.FC<ActiveAdvancesTableProps> = ({
             const remainingAmt = adv.remainingAmount ?? (adv.amount - paidAmt);
             const isPartiallyPaid = paidAmt > 0;
             const isCancelled = adv.status === 'cancelled';
-            const isFullyPaid = adv.status === 'paid' || remainingAmt <= 0;
+            const isFullyPaid = adv.status === 'fully_paid' || remainingAmt <= 0;
 
             return (
               <div
@@ -214,6 +245,9 @@ export const ActiveAdvancesTable: React.FC<ActiveAdvancesTableProps> = ({
                       <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
                         {adv.startDate || adv.createdAt?.slice(0, 10)}
+                      </p>
+                      <p className="text-[10px] text-amber-400 mt-0.5">
+                        شهر السلفة: {getAdvancePayrollPeriodLabel(adv)}
                       </p>
                     </div>
                   </div>
@@ -333,7 +367,7 @@ export const ActiveAdvancesTable: React.FC<ActiveAdvancesTableProps> = ({
                 const remainingAmt = adv.remainingAmount ?? (adv.amount - paidAmt);
                 const isPartiallyPaid = paidAmt > 0;
                 const isCancelled = adv.status === 'cancelled';
-                const isFullyPaid = adv.status === 'paid' || remainingAmt <= 0;
+                const isFullyPaid = adv.status === 'fully_paid' || remainingAmt <= 0;
 
                 return (
                   <TableRow
@@ -353,6 +387,9 @@ export const ActiveAdvancesTable: React.FC<ActiveAdvancesTableProps> = ({
                           <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
                             {adv.startDate || adv.createdAt?.slice(0, 10)}
+                          </p>
+                          <p className="text-[10px] text-amber-400 mt-0.5">
+                            شهر السلفة: {getAdvancePayrollPeriodLabel(adv)}
                           </p>
                         </div>
                       </div>

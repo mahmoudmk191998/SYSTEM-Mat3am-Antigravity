@@ -1269,6 +1269,11 @@ export interface HrSettings {
   late_deduction_enabled: boolean;
   early_leave_deduction_enabled: boolean;
   overtime_enabled: boolean;
+  active_payroll_period?: string;
+  salary_due_day?: number;
+  salary_due_timing?: 'same_month' | 'next_month';
+  payroll_period_started_at?: string;
+  payroll_period_started_by?: string;
   public_app_url?: string;
 }
 
@@ -1284,6 +1289,11 @@ const DEFAULT_HR_SETTINGS: HrSettings = {
   late_deduction_enabled: false,
   early_leave_deduction_enabled: false,
   overtime_enabled: false,
+  active_payroll_period: '',
+  salary_due_day: 28,
+  salary_due_timing: 'same_month',
+  payroll_period_started_at: '',
+  payroll_period_started_by: '',
   public_app_url: 'https://mksystem-rose.vercel.app',
 };
 

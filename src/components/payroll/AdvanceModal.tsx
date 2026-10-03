@@ -19,14 +19,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { HandCoins, Calculator, Calendar } from 'lucide-react';
-import type { PaymentMethod, AdvanceRepaymentType } from '@/types/payroll';
+import type { PaymentMethod, AdvanceRepaymentType, PayrollPeriod } from '@/types/payroll';
 import { useAuth } from '@/hooks/useAuth';
+import { getCurrentPayrollPeriod, getPayrollPeriodLabel, isValidPayrollPeriod } from '@/lib/payrollPeriods';
 
 interface AdvanceModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   employees: Array<{ id: string; name: string; role?: string }>;
   defaultEmployeeId?: string;
+  currentPayrollPeriod?: PayrollPeriod;
   onSaveAdvance: (data: {
     employeeId: string;
     employeeName: string;
@@ -35,6 +37,7 @@ interface AdvanceModalProps {
     installmentAmount?: number;
     numberOfInstallments?: number;
     startDate: string;
+    payrollPeriod: PayrollPeriod;
     paymentMethod: PaymentMethod;
     notes?: string;
     currentUser?: any;
@@ -46,6 +49,7 @@ export const AdvanceModal: React.FC<AdvanceModalProps> = ({
   onOpenChange,
   employees,
   defaultEmployeeId,
+  currentPayrollPeriod,
   onSaveAdvance,
 }) => {
   const { user } = useAuth();
@@ -54,6 +58,9 @@ export const AdvanceModal: React.FC<AdvanceModalProps> = ({
   const [repaymentType, setRepaymentType] = useState<AdvanceRepaymentType>('next_salary');
   const [numberOfInstallments, setNumberOfInstallments] = useState<number>(4);
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [payrollPeriod, setPayrollPeriod] = useState<PayrollPeriod>(
+    isValidPayrollPeriod(currentPayrollPeriod) ? currentPayrollPeriod : getCurrentPayrollPeriod()
+  );
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -66,6 +73,14 @@ export const AdvanceModal: React.FC<AdvanceModalProps> = ({
       setEmployeeId(employees[0].id);
     }
   }, [defaultEmployeeId, employees]);
+
+  React.useEffect(() => {
+    if (open) {
+      setPayrollPeriod(
+        isValidPayrollPeriod(currentPayrollPeriod) ? currentPayrollPeriod : getCurrentPayrollPeriod()
+      );
+    }
+  }, [open, currentPayrollPeriod]);
 
   const numAmount = Number(amount) || 0;
   const calculatedInstallment = repaymentType === 'installments' && numberOfInstallments > 0
@@ -89,6 +104,7 @@ export const AdvanceModal: React.FC<AdvanceModalProps> = ({
         installmentAmount: calculatedInstallment,
         numberOfInstallments: repaymentType === 'installments' ? numberOfInstallments : 1,
         startDate,
+        payrollPeriod,
         paymentMethod,
         notes: notes.trim() || undefined,
         currentUser: user,
@@ -114,7 +130,7 @@ export const AdvanceModal: React.FC<AdvanceModalProps> = ({
             <span>تسجيل سلفة جديدة لموظف</span>
           </DialogTitle>
           <DialogDescription className="text-xs">
-            سيتم خصم السلفة تلقائياً من مسير الرواتب القادم حسب خطة السداد المحددة
+            اربط السلفة بشهر الرواتب الصحيح؛ يبدأ الخصم من هذا الشهر حسب خطة السداد المحددة
           </DialogDescription>
         </DialogHeader>
 
@@ -167,6 +183,29 @@ export const AdvanceModal: React.FC<AdvanceModalProps> = ({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Payroll Period */}
+          <div className="space-y-1.5 p-3 rounded-xl border border-amber-500/20 bg-amber-500/5">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs font-semibold">شهر السلفة / فترة الراتب *</Label>
+              <span className="text-[10px] text-amber-400 font-medium">
+                {getPayrollPeriodLabel(payrollPeriod)}
+              </span>
+            </div>
+            <Input
+              type="month"
+              value={payrollPeriod}
+              onChange={(e) => {
+                if (isValidPayrollPeriod(e.target.value)) setPayrollPeriod(e.target.value);
+              }}
+              className="h-10 text-xs font-mono"
+              disabled={isSubmitting}
+              required
+            />
+            <p className="text-[10px] text-muted-foreground">
+              السلفة لن تُخصم من أي مسير أقدم من الشهر المحدد.
+            </p>
           </div>
 
           {/* Repayment Type */}
@@ -233,7 +272,7 @@ export const AdvanceModal: React.FC<AdvanceModalProps> = ({
           {/* Start Date & Notes */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs">تاريخ بدء الخصم</Label>
+              <Label className="text-xs">تاريخ صرف السلفة</Label>
               <Input
                 type="date"
                 value={startDate}

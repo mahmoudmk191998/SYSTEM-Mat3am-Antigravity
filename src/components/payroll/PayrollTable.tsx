@@ -39,8 +39,10 @@ import {
   Clock,
   Trash2,
   RotateCcw,
+  CalendarClock,
+  PlayCircle,
 } from 'lucide-react';
-import type { PayrollRecord, PayrollPeriod, SalaryPayment, Advance } from '@/types/payroll';
+import type { PayrollRecord, PayrollPeriod, SalaryPayment, Advance, SalaryDueTiming } from '@/types/payroll';
 import { SalaryPaymentModal } from './SalaryPaymentModal';
 import { AdvanceModal } from './AdvanceModal';
 import { VoidPaymentModal } from './VoidPaymentModal';
@@ -49,6 +51,7 @@ import { DeleteAdvanceModal } from './DeleteAdvanceModal';
 import { ActiveAdvancesTable } from './ActiveAdvancesTable';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { getNextPayrollPeriod, getPayrollPeriodLabel, getSalaryDueDate } from '@/lib/payrollPeriods';
 
 interface PayrollTableProps {
   periodRecords: PayrollRecord[];
@@ -57,6 +60,14 @@ interface PayrollTableProps {
   employees: Array<{ id: string; name: string; role?: string }>;
   currentPeriod: PayrollPeriod;
   onPeriodChange: (period: PayrollPeriod) => void;
+  activePayrollPeriod?: PayrollPeriod;
+  hasConfiguredPayrollPeriod?: boolean;
+  salaryDueDay?: number;
+  salaryDueTiming?: SalaryDueTiming;
+  payrollPeriodStartedAt?: string;
+  payrollPeriodStartedBy?: string;
+  onActivatePayrollPeriod?: (period: PayrollPeriod) => Promise<boolean>;
+  onUpdateSalarySchedule?: (settings: { salaryDueDay: number; salaryDueTiming: SalaryDueTiming }) => Promise<boolean>;
   onDisbursePayment: (data: any) => Promise<boolean>;
   onVoidPayment: (paymentId: string, reason: string) => Promise<boolean>;
   onCreateAdvance: (data: any) => Promise<string | null>;
@@ -84,6 +95,14 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
   employees,
   currentPeriod,
   onPeriodChange,
+  activePayrollPeriod,
+  hasConfiguredPayrollPeriod = false,
+  salaryDueDay = 28,
+  salaryDueTiming = 'same_month',
+  payrollPeriodStartedAt,
+  payrollPeriodStartedBy,
+  onActivatePayrollPeriod,
+  onUpdateSalarySchedule,
   onDisbursePayment,
   onVoidPayment,
   onCreateAdvance,
@@ -94,6 +113,7 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
   const [payrollSubTab, setPayrollSubTab] = useState<'payroll' | 'advances'>('payroll');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [isUpdatingCycle, setIsUpdatingCycle] = useState(false);
 
   // Modals
   const [selectedPayrollForPayment, setSelectedPayrollForPayment] = useState<PayrollRecord | null>(null);
@@ -112,6 +132,41 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
 
   // Month & Year parsing
   const [year, month] = currentPeriod.split('-');
+  const effectiveActivePeriod = activePayrollPeriod || currentPeriod;
+  const effectiveDueDay = Math.min(31, Math.max(1, Number(salaryDueDay) || 28));
+  const effectiveDueTiming: SalaryDueTiming = salaryDueTiming === 'next_month' ? 'next_month' : 'same_month';
+  const salaryDueDate = getSalaryDueDate(effectiveActivePeriod, effectiveDueDay, effectiveDueTiming);
+  const nextPayrollPeriod = getNextPayrollPeriod(effectiveActivePeriod);
+  const startedAtLabel = payrollPeriodStartedAt && !Number.isNaN(new Date(payrollPeriodStartedAt).getTime())
+    ? new Date(payrollPeriodStartedAt).toLocaleString('ar-EG')
+    : '';
+
+  const handleActivatePeriod = async (period: PayrollPeriod) => {
+    if (!onActivatePayrollPeriod || isUpdatingCycle) return;
+    try {
+      setIsUpdatingCycle(true);
+      const success = await onActivatePayrollPeriod(period);
+      if (success) onPeriodChange(period);
+    } finally {
+      setIsUpdatingCycle(false);
+    }
+  };
+
+  const handleSalaryScheduleChange = async (
+    nextDay: number = effectiveDueDay,
+    nextTiming: SalaryDueTiming = effectiveDueTiming
+  ) => {
+    if (!onUpdateSalarySchedule || isUpdatingCycle) return;
+    try {
+      setIsUpdatingCycle(true);
+      await onUpdateSalarySchedule({
+        salaryDueDay: Math.min(31, Math.max(1, Number(nextDay) || 28)),
+        salaryDueTiming: nextTiming,
+      });
+    } finally {
+      setIsUpdatingCycle(false);
+    }
+  };
 
   const handleMonthChange = (newMonth: string) => {
     onPeriodChange(`${year}-${newMonth}`);
@@ -317,6 +372,96 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
                   <span>تصدير CSV</span>
                 </Button>
               </div>
+            </div>
+
+            {/* Payroll Cycle */}
+            <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3.5">
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CalendarClock className="w-4 h-4 text-primary" />
+                    <span className="text-xs font-bold">دورة الرواتب الحالية</span>
+                    <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
+                      {getPayrollPeriodLabel(effectiveActivePeriod)}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[9px]",
+                        hasConfiguredPayrollPeriod
+                          ? "border-emerald-500/30 text-emerald-400"
+                          : "border-amber-500/30 text-amber-400"
+                      )}
+                    >
+                      {hasConfiguredPayrollPeriod ? 'مُعتمدة' : 'تلقائي حسب التاريخ'}
+                    </Badge>
+                  </div>
+
+                  <p className="text-[10px] text-muted-foreground">
+                    موعد صرف الراتب: <span className="font-bold text-slate-200">{salaryDueDate}</span>
+                    {startedAtLabel && <span> • بدأت الدورة: {startedAtLabel}</span>}
+                    {payrollPeriodStartedBy && <span> • بواسطة: {payrollPeriodStartedBy}</span>}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 sm:flex items-center gap-2">
+                  <Select
+                    value={String(effectiveDueDay)}
+                    onValueChange={(value) => handleSalaryScheduleChange(Number(value), effectiveDueTiming)}
+                    disabled={!onUpdateSalarySchedule || isUpdatingCycle}
+                  >
+                    <SelectTrigger className="h-9 w-full sm:w-[120px] text-xs bg-slate-900 border-slate-700">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                        <SelectItem key={day} value={String(day)}>يوم {day}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={effectiveDueTiming}
+                    onValueChange={(value: SalaryDueTiming) => handleSalaryScheduleChange(effectiveDueDay, value)}
+                    disabled={!onUpdateSalarySchedule || isUpdatingCycle}
+                  >
+                    <SelectTrigger className="h-9 w-full sm:w-[150px] text-xs bg-slate-900 border-slate-700">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="same_month">نفس الشهر</SelectItem>
+                      <SelectItem value="next_month">الشهر التالي</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!onActivatePayrollPeriod || isUpdatingCycle || (hasConfiguredPayrollPeriod && currentPeriod === effectiveActivePeriod)}
+                    onClick={() => handleActivatePeriod(currentPeriod)}
+                    className="h-9 text-xs gap-1.5"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    اعتماد الشهر المعروض
+                  </Button>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={!onActivatePayrollPeriod || isUpdatingCycle}
+                    onClick={() => handleActivatePeriod(nextPayrollPeriod)}
+                    className="h-9 text-xs gap-1.5"
+                  >
+                    <PlayCircle className="w-3.5 h-3.5" />
+                    بدء {getPayrollPeriodLabel(nextPayrollPeriod)}
+                  </Button>
+                </div>
+              </div>
+
+              <p className="mt-2 text-[10px] text-muted-foreground">
+                بدء شهر جديد لا يغيّر أي مسير أو دفعة تاريخية؛ هو يحدد فقط الشهر النشط للرواتب والسلف الجديدة.
+              </p>
             </div>
 
             {/* Filter bar */}
@@ -748,6 +893,7 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
         open={isAdvanceModalOpen}
         onOpenChange={setIsAdvanceModalOpen}
         employees={employees}
+        currentPayrollPeriod={effectiveActivePeriod}
         onSaveAdvance={onCreateAdvance}
       />
 
