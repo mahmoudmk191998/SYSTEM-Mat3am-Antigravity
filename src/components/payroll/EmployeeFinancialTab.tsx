@@ -43,6 +43,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import type { PayrollRecord, SalaryPayment, Advance, AdvanceInstallment } from '@/types/payroll';
+import { getAdvancePayrollPeriodLabel } from '@/lib/payrollPeriods';
 import { AdvanceModal } from './AdvanceModal';
 import { VoidPaymentModal } from './VoidPaymentModal';
 import { CancelAdvanceModal } from './CancelAdvanceModal';
@@ -351,7 +352,7 @@ export const EmployeeFinancialTab: React.FC<EmployeeFinancialTabProps> = ({
                     المتبقي: <span className="font-mono text-amber-400 font-bold">{adv.remainingAmount.toLocaleString('ar-EG')} ج.م</span> • المسدد: <span className="font-mono text-emerald-400">{adv.paidAmount.toLocaleString('ar-EG')} ج.م</span>
                   </p>
                   <p className="text-[10px] text-slate-400 pt-0.5">
-                    تاريخ البدء: {adv.startDate}
+                    تاريخ الصرف: {adv.startDate || '—'} • شهر السلفة: {getAdvancePayrollPeriodLabel(adv)}
                   </p>
                 </div>
 
