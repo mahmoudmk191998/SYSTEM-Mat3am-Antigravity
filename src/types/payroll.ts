@@ -1,5 +1,7 @@
 export type PayrollPeriod = string; // Format: 'YYYY-MM' (e.g. '2026-09')
 export type SalaryDueTiming = 'same_month' | 'next_month';
+export type PayrollCycleKind = 'calendar_month' | 'custom_day';
+export type PayrollSettlementSource = 'salary_payment' | 'advance_offset' | 'mixed' | 'deductions';
 
 export type PayrollStatus = 'unpaid' | 'partial' | 'paid';
 
@@ -29,6 +31,10 @@ export interface PayrollRecord {
   employeeName: string;
   employeeRole: string;
   period: PayrollPeriod;
+  periodStart?: string;
+  periodEnd?: string;
+  salaryDueDate?: string;
+  cycleKind?: PayrollCycleKind;
   year: number;
   month: number;
   basicSalarySnapshot: number;
@@ -47,6 +53,11 @@ export interface PayrollRecord {
   totalPaid: number;
   remaining: number;
   status: PayrollStatus;
+  settledAt?: string;
+  settledBy?: string;
+  settlementSource?: PayrollSettlementSource;
+  settledAdvanceAmount?: number;
+  settlementStatus?: 'processing' | 'completed' | 'failed';
   createdAt: string;
   updatedAt: string;
   createdBy?: string;
