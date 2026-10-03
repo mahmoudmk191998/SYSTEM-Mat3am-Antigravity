@@ -229,16 +229,29 @@ export function resolveEmployeeTargetPayrollPeriod(
 }
 
 export function payrollRecordMatchesCycle(
-  record: { period?: PayrollPeriod; cycleKey?: string },
+  record: {
+    period?: PayrollPeriod;
+    cycleKey?: string;
+    periodStart?: string;
+    periodEnd?: string;
+  },
   cycle: EmployeePayrollCycle
 ): boolean {
   if (record.cycleKey) {
     return record.cycleKey === cycle.cycleKey;
   }
 
-  // Legacy records did not have cycle identity. They are safe to reuse only
-  // for calendar-month employees; never let an old monthly snapshot hijack a
-  // newly introduced custom-payday cycle that happens to share YYYY-MM.
+  // Transitional records created after custom cycles were introduced but
+  // before cycleKey existed can still be identified safely by exact dates.
+  if (record.periodStart && record.periodEnd) {
+    return (
+      record.periodStart === cycle.periodStart &&
+      record.periodEnd === cycle.periodEnd
+    );
+  }
+
+  // Pre-cycle legacy records had only YYYY-MM. Reuse them only for the old
+  // calendar-month model, never for a custom-payday cycle with the same label.
   return !cycle.usesEmployeeCustomDay && record.period === cycle.period;
 }
 
