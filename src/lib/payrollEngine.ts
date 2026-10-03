@@ -304,7 +304,13 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
     if (p.employeeId !== employee.id || p.status !== 'completed') return false;
 
     if (cycleKey) {
-      return p.payrollCycleKey === cycleKey;
+      if (p.payrollCycleKey) {
+        return p.payrollCycleKey === cycleKey;
+      }
+
+      // Transitional payment written before payrollCycleKey existed is valid
+      // only when it is explicitly linked to the exact matched payroll record.
+      return Boolean(existingRecord?.id && p.payrollId === existingRecord.id);
     }
 
     return p.payrollPeriod === period;
