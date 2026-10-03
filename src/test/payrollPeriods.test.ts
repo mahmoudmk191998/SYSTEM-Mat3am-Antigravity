@@ -7,12 +7,13 @@ import {
   getEmployeeAutoPayrollPeriod,
   getEmployeePayrollCycle,
   getNextEmployeePayrollCycle,
+  payrollRecordMatchesCycle,
   isAdvanceEligibleForPeriod,
   isValidPayrollPeriod,
   resolveAdvancePayrollPeriod,
 } from '../lib/payrollPeriods';
 import { calculateEmployeePayroll } from '../lib/payrollEngine';
-import type { Advance } from '../types/payroll';
+import type { Advance, PayrollRecord, SalaryPayment } from '../types/payroll';
 
 function makeAdvance(overrides: Partial<Advance> = {}): Advance {
   return {
@@ -198,6 +199,143 @@ describe('Payroll Period & Advance Month Tracking', () => {
     expect(payroll.netSalary).toBe(0);
     expect(payroll.remaining).toBe(0);
     expect(payroll.status).toBe('paid');
+  });
+
+  it('does not let a paid legacy October payroll hijack a new custom October cycle', () => {
+    const employee = { id: 'emp_1', name: 'محمد', salary: 9000, salary_due_day: 15 };
+    const cycle = getEmployeePayrollCycle('2026-10', employee, 28, 'same_month');
+
+    const legacyPayroll = {
+      id: 'payroll_emp_1_2026_10',
+      tenant_id: 'tenant_1',
+      employeeId: 'emp_1',
+      employeeName: 'محمد',
+      employeeRole: 'مساعد',
+      period: '2026-10',
+      year: 2026,
+      month: 10,
+      basicSalarySnapshot: 9000,
+      dailyRateSnapshot: 300,
+      hourlyRateSnapshot: 37.5,
+      allowances: 0,
+      overtime: 0,
+      bonuses: 0,
+      grossSalary: 9000,
+      attendanceDeductions: 0,
+      attendanceSummary: {
+        attendedDays: 0,
+        absentDays: 0,
+        lateCount: 0,
+        totalLateMinutes: 0,
+        earlyLeaveMinutes: 0,
+        totalHours: 0,
+        deductionReason: 'لا توجد خصومات حضور',
+      },
+      manualDeductions: 0,
+      advanceDeductions: 3000,
+      netSalary: 6000,
+      totalPaid: 6000,
+      remaining: 0,
+      status: 'paid',
+      createdAt: '2026-10-01T10:00:00.000Z',
+      updatedAt: '2026-10-01T10:00:00.000Z',
+    } satisfies PayrollRecord;
+
+    expect(payrollRecordMatchesCycle(legacyPayroll, cycle)).toBe(false);
+  });
+
+  it('new custom cycle ignores legacy paid salary and old fully-paid advance from the same month', () => {
+    const employee = { id: 'emp_1', name: 'محمد', salary: 9000, salary_due_day: 15 };
+    const cycle = getEmployeePayrollCycle('2026-10', employee, 28, 'same_month');
+
+    const legacyAdvance = makeAdvance({
+      id: 'legacy_adv',
+      amount: 3000,
+      paidAmount: 3000,
+      remainingAmount: 0,
+      installmentAmount: 3000,
+      remainingInstallments: 0,
+      payrollPeriod: undefined,
+      firstDeductionPeriod: undefined,
+      startDate: '2026-10-01',
+      status: 'fully_paid',
+      deductedPeriods: ['2026-10'],
+      deductedCycleKeys: undefined,
+    });
+
+    const legacyPayment = {
+      id: 'legacy_payment',
+      tenant_id: 'tenant_1',
+      payrollId: 'payroll_emp_1_2026_10',
+      employeeId: 'emp_1',
+      employeeName: 'محمد',
+      payrollPeriod: '2026-10',
+      amount: 6000,
+      paymentMethod: 'cash',
+      idempotencyKey: 'legacy',
+      status: 'completed',
+      createdAt: '2026-10-01T10:00:00.000Z',
+      createdBy: 'admin',
+    } satisfies SalaryPayment;
+
+    const payroll = calculateEmployeePayroll({
+      employee,
+      period: '2026-10',
+      periodStart: cycle.periodStart,
+      periodEnd: cycle.periodEnd,
+      salaryDueDate: cycle.dueDate,
+      cycleKind: cycle.cycleKind,
+      cycleKey: cycle.cycleKey,
+      attendanceRecords: [],
+      advances: [legacyAdvance],
+      payments: [legacyPayment],
+      existingRecord: null,
+    });
+
+    expect(payroll.cycleKey).toBe(cycle.cycleKey);
+    expect(payroll.advanceDeductions).toBe(0);
+    expect(payroll.totalPaid).toBe(0);
+    expect(payroll.netSalary).toBe(9000);
+    expect(payroll.remaining).toBe(9000);
+    expect(payroll.status).toBe('unpaid');
+  });
+
+  it('new salary payment affects only its exact custom cycle', () => {
+    const employee = { id: 'emp_1', name: 'محمد', salary: 9000, salary_due_day: 15 };
+    const cycle = getEmployeePayrollCycle('2026-10', employee, 28, 'same_month');
+
+    const currentCyclePayment = {
+      id: 'current_payment',
+      tenant_id: 'tenant_1',
+      payrollId: 'payroll_cycle_' + cycle.cycleKey,
+      employeeId: 'emp_1',
+      employeeName: 'محمد',
+      payrollPeriod: '2026-10',
+      payrollCycleKey: cycle.cycleKey,
+      amount: 2000,
+      paymentMethod: 'cash',
+      idempotencyKey: 'current-cycle',
+      status: 'completed',
+      createdAt: '2026-10-03T10:00:00.000Z',
+      createdBy: 'admin',
+    } satisfies SalaryPayment;
+
+    const payroll = calculateEmployeePayroll({
+      employee,
+      period: '2026-10',
+      periodStart: cycle.periodStart,
+      periodEnd: cycle.periodEnd,
+      salaryDueDate: cycle.dueDate,
+      cycleKind: cycle.cycleKind,
+      cycleKey: cycle.cycleKey,
+      attendanceRecords: [],
+      advances: [],
+      payments: [currentCyclePayment],
+    });
+
+    expect(payroll.totalPaid).toBe(2000);
+    expect(payroll.remaining).toBe(7000);
+    expect(payroll.status).toBe('partial');
   });
 
   it('Arabic payroll period label is non-empty', () => {
