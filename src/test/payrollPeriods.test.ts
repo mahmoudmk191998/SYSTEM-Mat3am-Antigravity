@@ -4,6 +4,9 @@ import {
   getNextPayrollPeriod,
   getPayrollPeriodLabel,
   getSalaryDueDate,
+  getEmployeeAutoPayrollPeriod,
+  getEmployeePayrollCycle,
+  getNextEmployeePayrollCycle,
   isAdvanceEligibleForPeriod,
   isValidPayrollPeriod,
   resolveAdvancePayrollPeriod,
@@ -105,6 +108,96 @@ describe('Payroll Period & Advance Month Tracking', () => {
     expect(september.netSalary).toBe(8000);
     expect(october.advanceDeductions).toBe(2000);
     expect(october.netSalary).toBe(6000);
+  });
+
+  it('builds a custom employee salary cycle from the day after the previous payday', () => {
+    const employee = { id: 'emp_1', name: 'محمد', salary_due_day: 15 };
+    const cycle = getEmployeePayrollCycle('2026-10', employee, 28, 'same_month');
+
+    expect(cycle.periodStart).toBe('2026-09-16');
+    expect(cycle.periodEnd).toBe('2026-10-15');
+    expect(cycle.dueDate).toBe('2026-10-15');
+    expect(cycle.cycleKind).toBe('custom_day');
+    expect(cycle.usesEmployeeCustomDay).toBe(true);
+  });
+
+  it('moves a custom-payday employee to the next cycle the day after payday', () => {
+    const employee = { id: 'emp_1', name: 'محمد', salary_due_day: 2 };
+
+    expect(
+      getEmployeeAutoPayrollPeriod(employee, 28, 'same_month', new Date(2026, 9, 2, 12))
+    ).toBe('2026-10');
+
+    expect(
+      getEmployeeAutoPayrollPeriod(employee, 28, 'same_month', new Date(2026, 9, 3, 12))
+    ).toBe('2026-11');
+
+    const nextCycle = getNextEmployeePayrollCycle('2026-10', employee, 28, 'same_month');
+    expect(nextCycle.periodStart).toBe('2026-10-03');
+    expect(nextCycle.periodEnd).toBe('2026-11-02');
+  });
+
+  it('clamps employee payday 31 safely in short months', () => {
+    const employee = { id: 'emp_1', name: 'محمد', salary_due_day: 31 };
+    const february = getEmployeePayrollCycle('2026-02', employee, 28, 'same_month');
+
+    expect(february.periodEnd).toBe('2026-02-28');
+    expect(february.dueDate).toBe('2026-02-28');
+  });
+
+  it('uses the custom employee cycle range for attendance instead of calendar month', () => {
+    const cycle = getEmployeePayrollCycle(
+      '2026-10',
+      { id: 'emp_1', name: 'محمد', salary_due_day: 15 },
+      28,
+      'same_month'
+    );
+
+    const payroll = calculateEmployeePayroll({
+      employee: { id: 'emp_1', name: 'محمد', salary: 9000 },
+      period: '2026-10',
+      periodStart: cycle.periodStart,
+      periodEnd: cycle.periodEnd,
+      salaryDueDate: cycle.dueDate,
+      cycleKind: cycle.cycleKind,
+      attendanceRecords: [
+        { employeeId: 'emp_1', date: '2026-09-15', status: 'absent' },
+        { employeeId: 'emp_1', date: '2026-09-16', status: 'present', hours: 8 },
+        { employeeId: 'emp_1', date: '2026-10-15', status: 'absent' },
+        { employeeId: 'emp_1', date: '2026-10-16', status: 'absent' },
+      ],
+      advances: [],
+      payments: [],
+    });
+
+    expect(payroll.attendanceSummary.attendedDays).toBe(1);
+    expect(payroll.attendanceSummary.absentDays).toBe(1);
+    expect(payroll.periodStart).toBe('2026-09-16');
+    expect(payroll.periodEnd).toBe('2026-10-15');
+    expect(payroll.salaryDueDate).toBe('2026-10-15');
+  });
+
+  it('a salary fully offset by an advance is paid with zero cash salary remaining', () => {
+    const advance = makeAdvance({
+      amount: 8000,
+      remainingAmount: 8000,
+      installmentAmount: 8000,
+      payrollPeriod: '2026-10',
+      firstDeductionPeriod: '2026-10',
+    });
+
+    const payroll = calculateEmployeePayroll({
+      employee: { id: 'emp_1', name: 'محمد', salary: 8000 },
+      period: '2026-10',
+      attendanceRecords: [],
+      advances: [advance],
+      payments: [],
+    });
+
+    expect(payroll.advanceDeductions).toBe(8000);
+    expect(payroll.netSalary).toBe(0);
+    expect(payroll.remaining).toBe(0);
+    expect(payroll.status).toBe('paid');
   });
 
   it('Arabic payroll period label is non-empty', () => {

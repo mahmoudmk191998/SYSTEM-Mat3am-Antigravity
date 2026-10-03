@@ -57,7 +57,7 @@ interface PayrollTableProps {
   periodRecords: PayrollRecord[];
   allPayments: SalaryPayment[];
   allAdvances: Advance[];
-  employees: Array<{ id: string; name: string; role?: string }>;
+  employees: Array<{ id: string; name: string; role?: string; salary_due_day?: number | string | null }>;
   currentPeriod: PayrollPeriod;
   onPeriodChange: (period: PayrollPeriod) => void;
   activePayrollPeriod?: PayrollPeriod;
@@ -69,6 +69,7 @@ interface PayrollTableProps {
   onActivatePayrollPeriod?: (period: PayrollPeriod) => Promise<boolean>;
   onUpdateSalarySchedule?: (settings: { salaryDueDay: number; salaryDueTiming: SalaryDueTiming }) => Promise<boolean>;
   onDisbursePayment: (data: any) => Promise<boolean>;
+  onSettlePayroll?: (payroll: PayrollRecord) => Promise<boolean>;
   onVoidPayment: (paymentId: string, reason: string) => Promise<boolean>;
   onCreateAdvance: (data: any) => Promise<string | null>;
   onDeleteAdvance?: (advanceId: string, reason: string) => Promise<{ success: boolean; message?: string }>;
@@ -104,6 +105,7 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
   onActivatePayrollPeriod,
   onUpdateSalarySchedule,
   onDisbursePayment,
+  onSettlePayroll,
   onVoidPayment,
   onCreateAdvance,
   onDeleteAdvance,
@@ -114,6 +116,7 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [isUpdatingCycle, setIsUpdatingCycle] = useState(false);
+  const [settlingPayrollId, setSettlingPayrollId] = useState<string | null>(null);
 
   // Modals
   const [selectedPayrollForPayment, setSelectedPayrollForPayment] = useState<PayrollRecord | null>(null);
@@ -255,6 +258,16 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
 
   const handleVoidPaymentClick = (payment: SalaryPayment) => {
     setVoidPaymentTarget(payment);
+  };
+
+  const handleSettlePayroll = async (record: PayrollRecord) => {
+    if (!onSettlePayroll || settlingPayrollId) return;
+    try {
+      setSettlingPayrollId(record.id);
+      await onSettlePayroll(record);
+    } finally {
+      setSettlingPayrollId(null);
+    }
   };
 
   return (
@@ -523,7 +536,7 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
               ) : (
                 filteredRecords.map((rec) => {
                   const empPayments = allPayments.filter(
-                    (p) => p.employeeId === rec.employeeId && p.payrollPeriod === currentPeriod
+                    (p) => p.employeeId === rec.employeeId && p.payrollPeriod === rec.period
                   );
 
                   return (
@@ -532,6 +545,12 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
                         <div>
                           <p className="font-bold text-slate-100 text-sm">{rec.employeeName}</p>
                           <p className="text-[11px] text-muted-foreground">{rec.employeeRole}</p>
+                          {(rec.periodStart || rec.salaryDueDate) && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {rec.periodStart && rec.periodEnd ? `${rec.periodStart} ← ${rec.periodEnd}` : ''}
+                              {rec.salaryDueDate ? ` • راتب: ${rec.salaryDueDate}` : ''}
+                            </p>
+                          )}
                         </div>
                         <Badge className={`text-[10px] border ${statusBadgeStyles[rec.status] || ''}`}>
                           {statusLabels[rec.status] || rec.status}
@@ -580,7 +599,7 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
                               <DollarSign className="w-3.5 h-3.5" />
                               <span>صرف</span>
                             </Button>
-                          ) : (
+                          ) : rec.settledAt || rec.settlementStatus === 'completed' ? (
                             <Button
                               size="sm"
                               variant="outline"
@@ -588,7 +607,18 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
                               className="h-8 px-2.5 text-[11px] border-emerald-500/30 text-emerald-400 opacity-80"
                             >
                               <CheckCircle2 className="w-3 h-3 ml-1" />
-                              مسدد
+                              الدورة مقفلة
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleSettlePayroll(rec)}
+                              disabled={!onSettlePayroll || settlingPayrollId === rec.id}
+                              className="h-8 px-2.5 text-[11px] border-amber-500/30 text-amber-400"
+                            >
+                              <CheckCircle2 className="w-3 h-3 ml-1" />
+                              {settlingPayrollId === rec.id ? 'جاري الإقفال...' : 'إقفال الدورة'}
                             </Button>
                           )}
 
@@ -691,7 +721,7 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
               ) : (
                 filteredRecords.map((rec) => {
                   const empPayments = allPayments.filter(
-                    (p) => p.employeeId === rec.employeeId && p.payrollPeriod === currentPeriod
+                    (p) => p.employeeId === rec.employeeId && p.payrollPeriod === rec.period
                   );
 
                   return (
@@ -701,6 +731,12 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
                         <div>
                           <p className="font-bold text-slate-100">{rec.employeeName}</p>
                           <p className="text-[10px] text-muted-foreground">{rec.employeeRole}</p>
+                          {(rec.periodStart || rec.salaryDueDate) && (
+                            <p className="text-[9px] text-muted-foreground mt-0.5 whitespace-nowrap">
+                              {rec.periodStart && rec.periodEnd ? `${rec.periodStart} ← ${rec.periodEnd}` : ''}
+                              {rec.salaryDueDate ? ` • راتب: ${rec.salaryDueDate}` : ''}
+                            </p>
+                          )}
                         </div>
                       </TableCell>
 
@@ -773,7 +809,7 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
                               <DollarSign className="w-3.5 h-3.5" />
                               <span>صرف</span>
                             </Button>
-                          ) : (
+                          ) : rec.settledAt || rec.settlementStatus === 'completed' ? (
                             <Button
                               size="sm"
                               variant="outline"
@@ -781,7 +817,18 @@ export const PayrollTable: React.FC<PayrollTableProps> = ({
                               className="h-7 px-2 text-[11px] border-emerald-500/30 text-emerald-400 opacity-80"
                             >
                               <CheckCircle2 className="w-3 h-3 ml-1" />
-                              مسدد
+                              مقفلة
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleSettlePayroll(rec)}
+                              disabled={!onSettlePayroll || settlingPayrollId === rec.id}
+                              className="h-7 px-2 text-[11px] border-amber-500/30 text-amber-400"
+                            >
+                              <CheckCircle2 className="w-3 h-3 ml-1" />
+                              {settlingPayrollId === rec.id ? '...' : 'إقفال'}
                             </Button>
                           )}
 
