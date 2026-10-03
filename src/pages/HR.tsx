@@ -42,10 +42,12 @@ import { LeavesTab } from '@/components/hr/LeavesTab';
 import { calculateEmployeeLeaveBalance } from '@/services/leave.service';
 import { LEAVE_TYPE_CONFIG, LEAVE_STATUS_CONFIG } from '@/types/leave';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc } from 'firebase/firestore';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { formatWorkedHours, calculateLateMinutes, timeStringToMinutes } from '@/lib/attendanceSecurity';
+import type { PayrollPeriod, SalaryDueTiming } from '@/types/payroll';
+import { getCurrentPayrollPeriod, isValidPayrollPeriod } from '@/lib/payrollPeriods';
 
 const statusColors: Record<string, string> = {
   active: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
@@ -107,15 +109,93 @@ export default function HR() {
     getKPIs,
   } = usePayroll(tenantId, branchId);
 
-  const [payrollPeriod, setPayrollPeriod] = useState<string>(() => {
-    const d = new Date();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    return `${d.getFullYear()}-${m}`;
-  });
+  const [payrollPeriod, setPayrollPeriod] = useState<PayrollPeriod>(() => getCurrentPayrollPeriod());
 
   const { currency, number } = useFormatters();
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
+
+  const configuredPayrollPeriod = isValidPayrollPeriod(hrSettings.active_payroll_period)
+    ? hrSettings.active_payroll_period
+    : null;
+  const activePayrollPeriod = configuredPayrollPeriod || getCurrentPayrollPeriod();
+
+  useEffect(() => {
+    if (configuredPayrollPeriod) {
+      setPayrollPeriod(configuredPayrollPeriod);
+    }
+  }, [configuredPayrollPeriod]);
+
+  const payrollActorName =
+    (user as any)?.displayName || user?.email || user?.uid || 'المدير';
+
+  const handleActivatePayrollPeriod = async (period: PayrollPeriod): Promise<boolean> => {
+    if (!isValidPayrollPeriod(period)) {
+      toast.error('فترة الرواتب غير صالحة');
+      return false;
+    }
+
+    const startedAt = new Date().toISOString();
+    const success = await updateHrSettings({
+      active_payroll_period: period,
+      payroll_period_started_at: startedAt,
+      payroll_period_started_by: payrollActorName,
+    });
+    if (!success) return false;
+
+    setPayrollPeriod(period);
+
+    await addDoc(collection(db, 'audit_logs'), {
+      tenant_id: tenantId || '',
+      branch_id: branchId || '',
+      action: 'PAYROLL_PERIOD_ACTIVATED',
+      entityType: 'payroll_period',
+      entityId: period,
+      payrollPeriod: period,
+      performedBy: payrollActorName,
+      performedAt: startedAt,
+      details: 'تم اعتماد وبدء دورة الرواتب ' + period,
+      severity: 'info',
+      created_at: startedAt,
+    }).catch((err) => console.warn('Payroll period audit warning:', err));
+
+    return true;
+  };
+
+  const handleUpdateSalarySchedule = async (settings: {
+    salaryDueDay: number;
+    salaryDueTiming: SalaryDueTiming;
+  }): Promise<boolean> => {
+    const salaryDueDay = Math.min(31, Math.max(1, Number(settings.salaryDueDay) || 28));
+    const salaryDueTiming: SalaryDueTiming =
+      settings.salaryDueTiming === 'next_month' ? 'next_month' : 'same_month';
+
+    const success = await updateHrSettings({
+      salary_due_day: salaryDueDay,
+      salary_due_timing: salaryDueTiming,
+    });
+    if (!success) return false;
+
+    const changedAt = new Date().toISOString();
+    await addDoc(collection(db, 'audit_logs'), {
+      tenant_id: tenantId || '',
+      branch_id: branchId || '',
+      action: 'PAYROLL_SCHEDULE_UPDATED',
+      entityType: 'payroll_schedule',
+      entityId: activePayrollPeriod,
+      payrollPeriod: activePayrollPeriod,
+      salaryDueDay,
+      salaryDueTiming,
+      performedBy: payrollActorName,
+      performedAt: changedAt,
+      details: 'تم تحديث موعد صرف الرواتب: يوم ' + salaryDueDay + ' (' +
+        (salaryDueTiming === 'same_month' ? 'نفس الشهر' : 'الشهر التالي') + ')',
+      severity: 'info',
+      created_at: changedAt,
+    }).catch((err) => console.warn('Payroll schedule audit warning:', err));
+
+    return true;
+  };
 
   const [preselectedLeaveEmployeeId, setPreselectedLeaveEmployeeId] = useState<string | null>(null);
 
@@ -1639,6 +1719,14 @@ export default function HR() {
             employees={employees}
             currentPeriod={payrollPeriod}
             onPeriodChange={setPayrollPeriod}
+            activePayrollPeriod={activePayrollPeriod}
+            hasConfiguredPayrollPeriod={Boolean(configuredPayrollPeriod)}
+            salaryDueDay={hrSettings.salary_due_day ?? 28}
+            salaryDueTiming={hrSettings.salary_due_timing ?? 'same_month'}
+            payrollPeriodStartedAt={hrSettings.payroll_period_started_at}
+            payrollPeriodStartedBy={hrSettings.payroll_period_started_by}
+            onActivatePayrollPeriod={handleActivatePayrollPeriod}
+            onUpdateSalarySchedule={handleUpdateSalarySchedule}
             onDisbursePayment={disburseSalaryPayment}
             onVoidPayment={voidSalaryPayment}
             onCreateAdvance={createAdvance}
