@@ -59,6 +59,7 @@ export interface PayrollCalculationOptions {
   periodEnd?: string;
   salaryDueDate?: string;
   cycleKind?: PayrollCycleKind;
+  cycleKey?: string;
 }
 
 /**
@@ -80,6 +81,7 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
     periodEnd,
     salaryDueDate,
     cycleKind,
+    cycleKey,
   } = options;
 
   const [yearStr, monthStr] = period.split('-');
@@ -258,15 +260,21 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
 
   let advanceDeductions = 0;
   for (const adv of empAdvances) {
-    // If the advance has already been deducted in this period:
-    if (adv.deductedPeriods && adv.deductedPeriods.includes(period)) {
-      // Use the installment amount that was previously locked for this period
+    const exactCycleAlreadyDeducted = Boolean(
+      cycleKey && adv.deductedCycleKeys?.includes(cycleKey)
+    );
+    const legacyPeriodAlreadyDeducted = Boolean(
+      !cycleKey && adv.deductedPeriods?.includes(period)
+    );
+
+    if (exactCycleAlreadyDeducted || legacyPeriodAlreadyDeducted) {
+      // Preserve locked historical deductions only when they belong to this
+      // exact cycle. A legacy month marker must never leak into a new cycle.
       const lockedAmount = adv.repaymentType === 'next_salary'
         ? adv.amount
         : Math.min(adv.amount, adv.installmentAmount || adv.amount);
       advanceDeductions += lockedAmount;
     } else if (adv.remainingAmount > 0) {
-      // Calculate installment for this period
       if (adv.repaymentType === 'next_salary') {
         advanceDeductions += adv.remainingAmount;
       } else {
@@ -292,12 +300,15 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
   );
 
   // 8. Total Paid from Completed Salary Payments
-  const empPayments = payments.filter(
-    (p) =>
-      p.employeeId === employee.id &&
-      p.payrollPeriod === period &&
-      p.status === 'completed'
-  );
+  const empPayments = payments.filter((p) => {
+    if (p.employeeId !== employee.id || p.status !== 'completed') return false;
+
+    if (cycleKey) {
+      return p.payrollCycleKey === cycleKey;
+    }
+
+    return p.payrollPeriod === period;
+  });
 
   const totalPaid = empPayments.length > 0
     ? empPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
@@ -314,7 +325,11 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
     status = 'paid';
   }
 
-  const recordId = existingRecord?.id || `payroll_${employee.id}_${period.replace('-', '_')}`;
+  const recordId = existingRecord?.id || (
+    cycleKey
+      ? `payroll_cycle_${cycleKey}`
+      : `payroll_${employee.id}_${period.replace('-', '_')}`
+  );
 
   return {
     id: recordId,
@@ -328,6 +343,7 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
     periodEnd,
     salaryDueDate,
     cycleKind,
+    cycleKey,
     year,
     month,
     basicSalarySnapshot: baseSalary,
@@ -356,7 +372,11 @@ export function calculateEmployeePayroll(options: PayrollCalculationOptions): Pa
  * Calculates due installment amount for an advance for a given period.
  * Returns 0 if already deducted for this period or if fully paid/cancelled.
  */
-export function calculateAdvanceDueInstallment(advance: Advance, period: PayrollPeriod): number {
+export function calculateAdvanceDueInstallment(
+  advance: Advance,
+  period: PayrollPeriod,
+  cycleKey?: string
+): number {
   if (advance.status === 'cancelled' || advance.status === 'fully_paid') {
     return 0;
   }
@@ -367,8 +387,12 @@ export function calculateAdvanceDueInstallment(advance: Advance, period: Payroll
   if (!isAdvanceEligibleForPeriod(advance, period)) {
     return 0;
   }
-  if (advance.deductedPeriods && advance.deductedPeriods.includes(period)) {
-    return 0; // Already deducted for this period!
+  if (cycleKey) {
+    if (advance.deductedCycleKeys?.includes(cycleKey)) {
+      return 0;
+    }
+  } else if (advance.deductedPeriods && advance.deductedPeriods.includes(period)) {
+    return 0; // Legacy cycle already deducted for this period.
   }
 
   if (advance.repaymentType === 'next_salary') {
@@ -381,9 +405,18 @@ export function calculateAdvanceDueInstallment(advance: Advance, period: Payroll
 /**
  * Simulates or executes advancing deduction state transition
  */
-export function applyAdvanceDeduction(advance: Advance, period: PayrollPeriod, installmentAmount: number): Advance {
-  if (advance.deductedPeriods && advance.deductedPeriods.includes(period)) {
-    return advance; // Idempotent
+export function applyAdvanceDeduction(
+  advance: Advance,
+  period: PayrollPeriod,
+  installmentAmount: number,
+  cycleKey?: string
+): Advance {
+  if (cycleKey) {
+    if (advance.deductedCycleKeys?.includes(cycleKey)) {
+      return advance;
+    }
+  } else if (advance.deductedPeriods && advance.deductedPeriods.includes(period)) {
+    return advance; // Legacy idempotency.
   }
 
   const paidAmount = (advance.paidAmount || 0) + installmentAmount;
@@ -398,7 +431,10 @@ export function applyAdvanceDeduction(advance: Advance, period: PayrollPeriod, i
     remainingAmount,
     remainingInstallments,
     status,
-    deductedPeriods: [...(advance.deductedPeriods || []), period],
+    deductedPeriods: Array.from(new Set([...(advance.deductedPeriods || []), period])),
+    deductedCycleKeys: cycleKey
+      ? Array.from(new Set([...(advance.deductedCycleKeys || []), cycleKey]))
+      : (advance.deductedCycleKeys || []),
   };
 }
 
@@ -560,9 +596,12 @@ export function reverseAdvanceInstallment(options: {
     advance.repaymentType === 'installments'
       ? (advance.remainingInstallments || 0) + 1
       : 1;
-  const restoredDeductedPeriods = (advance.deductedPeriods || []).filter(
-    (p) => p !== installment.period
-  );
+  const restoredDeductedPeriods = installment.cycleKey
+    ? (advance.deductedPeriods || [])
+    : (advance.deductedPeriods || []).filter((p) => p !== installment.period);
+  const restoredDeductedCycleKeys = installment.cycleKey
+    ? (advance.deductedCycleKeys || []).filter((key) => key !== installment.cycleKey)
+    : (advance.deductedCycleKeys || []);
   const restoredStatus = restoredPaidAmount > 0 ? 'partially_paid' : 'active';
 
   const updatedAdvance: Advance = {
@@ -571,6 +610,7 @@ export function reverseAdvanceInstallment(options: {
     remainingAmount: restoredRemainingAmount,
     remainingInstallments: restoredRemainingInstallments,
     deductedPeriods: restoredDeductedPeriods,
+    deductedCycleKeys: restoredDeductedCycleKeys,
     status: restoredStatus,
     updatedAt: nowIso,
   };
