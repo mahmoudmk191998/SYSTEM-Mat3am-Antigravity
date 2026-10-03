@@ -34,6 +34,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
+import { getCurrentPayrollPeriod, isValidPayrollPeriod } from '@/lib/payrollPeriods';
 import { 
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, 
   Tooltip as RechartsTooltip, ResponsiveContainer, Legend
@@ -45,6 +47,7 @@ const CATEGORIES: ExpenseCategory[] = ['رواتب', 'مشتريات', 'صيان
 
 export default function Expenses() {
   const { tenantId, branchId } = useTenantBranch();
+  const { user } = useAuth();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -60,6 +63,7 @@ export default function Expenses() {
     isSubmittingPayment,
     getPayrollForPeriod,
     disburseSalaryPayment,
+    settlePayrollCycle,
     voidSalaryPayment,
     createAdvance,
     cancelAdvance,
@@ -67,11 +71,13 @@ export default function Expenses() {
     getKPIs,
   } = usePayroll(tenantId, branchId);
 
-  const [payrollPeriod, setPayrollPeriod] = useState<string>(() => {
-    const d = new Date();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    return `${d.getFullYear()}-${m}`;
-  });
+  const [payrollPeriod, setPayrollPeriod] = useState<string>(() => getCurrentPayrollPeriod());
+
+  useEffect(() => {
+    if (isValidPayrollPeriod(hrSettings.active_payroll_period)) {
+      setPayrollPeriod(hrSettings.active_payroll_period);
+    }
+  }, [hrSettings.active_payroll_period]);
 
   const periodPayrollRecords = useMemo(() => {
     return getPayrollForPeriod(payrollPeriod, employees, attendance, hrSettings);
@@ -396,8 +402,19 @@ export default function Expenses() {
               employees={employees}
               currentPeriod={payrollPeriod}
               onPeriodChange={setPayrollPeriod}
+              activePayrollPeriod={isValidPayrollPeriod(hrSettings.active_payroll_period) ? hrSettings.active_payroll_period : payrollPeriod}
+              hasConfiguredPayrollPeriod={isValidPayrollPeriod(hrSettings.active_payroll_period)}
+              salaryDueDay={hrSettings.salary_due_day ?? 28}
+              salaryDueTiming={hrSettings.salary_due_timing ?? 'same_month'}
+              payrollPeriodStartedAt={hrSettings.payroll_period_started_at}
+              payrollPeriodStartedBy={hrSettings.payroll_period_started_by}
               onDisbursePayment={async (data) => {
                 const ok = await disburseSalaryPayment(data);
+                if (ok) fetchExpenses();
+                return ok;
+              }}
+              onSettlePayroll={async (payroll) => {
+                const ok = await settlePayrollCycle(payroll, user);
                 if (ok) fetchExpenses();
                 return ok;
               }}
